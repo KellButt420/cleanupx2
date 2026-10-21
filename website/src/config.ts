@@ -8,6 +8,7 @@ export type SiteConfig = {
   discordUrl: string | null;
   siteUrl: string | null;
   appInstallerUrl: string | null;
+  portableUrl: string | null;
 };
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -39,6 +40,7 @@ export function readConfig(env: Env, defaults: Partial<Record<keyof SiteConfig, 
     discordUrl: discordInvite(env.VITE_DISCORD_URL ?? defaults.discordUrl),
     siteUrl: httpsUrl(env.VITE_SITE_URL ?? defaults.siteUrl),
     appInstallerUrl: httpsUrl(env.VITE_APP_INSTALLER_URL ?? defaults.appInstallerUrl),
+    portableUrl: httpsUrl(env.VITE_PORTABLE_URL ?? defaults.portableUrl),
   };
 }
 
@@ -55,6 +57,16 @@ export function latestReleaseUrl(repository: string | null): string | null {
   const url = new URL(repository);
   return url.hostname === 'github.com' && /^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)
     ? `${url.origin}${url.pathname.replace(/\/$/, '').replace(/\.git$/, '')}/releases/latest` : null;
+}
+
+export function releasePageUrl(config: SiteConfig): string | null {
+  if (config.downloadUrl) {
+    const url = new URL(config.downloadUrl);
+    const match = url.pathname.match(/^(\/[^/]+\/[^/]+\/releases)\/download\/([^/]+)\/[^/]+$/);
+    if (url.hostname === 'github.com' && match) return `${url.origin}${match[1]}/tag/${match[2]}`;
+  }
+  const latest = latestReleaseUrl(config.repositoryUrl);
+  return config.appInstallerUrl ? latest : latest?.replace(/\/latest$/, '') ?? null;
 }
 
 export const wingetCommand = (id: string) => `winget install --id ${id} --exact --source winget`;

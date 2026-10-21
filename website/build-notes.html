@@ -45,7 +45,7 @@
       <h1>Build notes</h1>
       <p>cleanup is a native Windows 11 app built with C#, .NET 10, and WinUI 3, with a Rust library for discovery, uninstall, and file operations. It is a development build, not a production release.</p>
 
-      <div class="docs-notice"><p>The source is on <a href="https://github.com/wiredincorp/cleanup">GitHub</a>. A production-signed public installer and WinGet package are still being prepared. Development builds are signed with a local certificate and should not be shared as releases.</p></div>
+      <div class="docs-notice"><p>The source is on <a href="https://github.com/wiredincorp/cleanup">GitHub</a>. The preview is available as a normal setup EXE and a portable ZIP. Both include .NET, WinUI, and Visual C++ runtimes. Production signing and WinGet publication are still being prepared.</p></div>
 
       <h2>Release status</h2>
       <ul>
@@ -71,8 +71,8 @@
       <p>Remove development trust later with <code>.\packaging\Trust-DevCertificate.ps1 -Remove</code>.</p>
 
       <h2 id="winget">WinGet</h2>
-      <p>cleanup isn’t in the WinGet community repository yet. Publishing needs three things that don’t exist so far: a public release download, a production-signed MSIX, and a registered package identifier.</p>
-      <p>The website includes a manifest generator for that first release. It hashes the published MSIX and writes version, locale, and installer manifests in the layout <code>winget-pkgs</code> expects:</p>
+      <p>cleanup isn’t in the WinGet community repository yet. The desktop preview is available directly from GitHub Releases. WinGet publication and production signing are still being prepared.</p>
+      <p>The repository includes an optional MSIX manifest generator. It needs adapting for the new EXE installer before a desktop package can be submitted to <code>winget-pkgs</code>:</p>
       <pre><code>cd website
 bun run winget:prepare --id Publisher.Cleanup --version 1.0.0 \
   --url https://example.com/cleanup-1.0.0-x64.msix \
@@ -83,7 +83,7 @@ winget validate --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0
 winget install --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0</code></pre>
       <p>Validate and test-install locally, then submit the folder as a pull request to <a href="https://github.com/microsoft/winget-pkgs">microsoft/winget-pkgs</a>. Once the package is accepted, set <code>VITE_WINGET_ID</code> and the WinGet tab on the home page shows the install command.</p>
 
-      <h2>Updates and support</h2><p>Release installations will use Windows App Installer to check for signed updates on launch. Direct development MSIX installs do not have an update feed. Your settings and history stay in Windows-managed app data.</p><p>Find downloads on <a href="https://github.com/wiredincorp/cleanup/releases" data-releases>GitHub Releases</a>, or get help in <a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord</a>.</p><h2>What cleanup won’t do</h2>
+      <h2>Updates and support</h2><p>The desktop preview uses a per-user setup EXE with no MSIX registration or certificate import. A portable ZIP is also available. Install newer versions over the existing desktop installation to keep settings and history. Automatic updates are not enabled. Windows 11 x64 is the verified target; ARM64 through x64 emulation has not been tested, and macOS/Linux builds are unavailable.</p><p>Find downloads on <a href="https://github.com/wiredincorp/cleanup/releases" data-releases>GitHub Releases</a>, or get help in <a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord</a>.</p><h2>What cleanup won’t do</h2>
       <p>It isn’t a registry cleaner, a PC booster, or a debloater. It doesn’t run in the background. Uninstalls always use the application’s official uninstaller after you confirm the list, and leftovers get their own review with nothing preselected.</p>
     </main>
 

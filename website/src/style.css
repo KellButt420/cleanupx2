@@ -283,6 +283,7 @@ h2 { font-size: clamp(32px, 3.3vw, 44px); font-weight: 560; letter-spacing: -.04
 .install-panel section > p { font-size: 14px; line-height: 1.8; color: var(--muted); margin: 0 0 22px; }
 .install-panel .button { min-height: 44px; padding: 11px 17px; font-size: 13px; }
 .install-panel .release-link { display: flex; margin-bottom: 12px; }
+.install-panel .portable-link { margin-inline-start: 16px; }
 .install-panel .button .icon { width: 16px; height: 16px; }
 .install-panel .install-footnote { font-size: 11px; line-height: 1.8; margin: 20px 0 0; }
 .command-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--tint); padding: 9px 8px 9px 13px; border-radius: 6px; }

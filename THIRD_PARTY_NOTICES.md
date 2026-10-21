@@ -6,6 +6,8 @@ licenses remain in effect; the project's license does not replace them.
 - Windows App SDK / WinUI: Microsoft package license and notices.
 - .NET runtime and SDK: the licenses and third-party notices distributed by .NET.
 - CommunityToolkit.Mvvm: its package license and notices.
+- Visual C++ app-local runtime files: Microsoft's Visual Studio redistribution
+  license terms apply.
 - Rust dependencies: licenses identified by each exact package in Cargo.lock.
 - Fluent icons and Segoe fonts are provided by Windows; font files are not copied
   into this repository.
@@ -17,7 +19,11 @@ The project logos and credits artwork were supplied for this project. The origin
 SVG/WebP inputs are retained with their derived Windows assets. No branding or
 proprietary assets from other uninstaller utilities are included.
 
-Before public binary distribution, include the notices delivered with the exact
-runtime and dependency versions in the package. Keep any notices already included
-by self-contained .NET / Windows App SDK packaging. The release procedure records
-this remaining binary-distribution check explicitly.
+The desktop packaging script copies license/notice files from the exact restored
+.NET, Windows App SDK, CommunityToolkit, and Rust dependency packages into
+`Notices/` beside the app. Keep these files with the portable application.
+
+The setup EXE is built with Inno Setup 7.1.0 under its
+[license terms](https://jrsoftware.org/files/is/license.txt). The compiler itself
+is not bundled with the app. Review redistribution terms when changing dependencies
+or distributing a commercial version.

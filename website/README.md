@@ -16,12 +16,14 @@ bun run build      # check + static output in dist/
 ## Release links
 
 Public GitHub, Discord, and production-site links come from `../release.json`,
-shared with the Windows app. Direct downloads and WinGet stay unavailable until
-their signed releases exist. Environment variables can override those defaults:
+shared with the Windows app. The preview uses a setup EXE and portable ZIP. WinGet
+remains unavailable until a package is accepted. Environment variables can override
+the defaults:
 
 | Variable | Effect |
 | --- | --- |
 | `VITE_DOWNLOAD_URL` | Turns the Windows tab into a download button. Must be `https://`. |
+| `VITE_PORTABLE_URL` | Shows the portable ZIP download beside the installer. |
 | `VITE_REPOSITORY_URL` | Shows the source links in the footer and the open-source section. |
 | `VITE_WINGET_ID` | Shows `winget install --id <id> --exact --source winget` with a copy button. |
 | `VITE_DISCORD_URL` | Overrides the Discord support invite. |
@@ -31,7 +33,11 @@ their signed releases exist. Environment variables can override those defaults:
 Invalid values, such as non-HTTPS URLs or malformed package IDs, are ignored rather
 than rendered. Every `VITE_` value ends up in public JavaScript, so never put secrets in them.
 
-## WinGet
+## Optional MSIX WinGet tooling
+
+The existing generator targets MSIX only. It does not generate manifests for the
+new EXE installer; adapt it and validate the Inno installer type before submitting
+the desktop preview to WinGet.
 
 `bun run winget:prepare` writes the version, locale, and installer manifests for an MSIX
 release. It uses manifest schema 1.10.0 and the `manifests/<letter>/<Publisher>/<Package>/<version>/` layout:

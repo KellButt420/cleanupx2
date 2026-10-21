@@ -9,11 +9,12 @@ internal static class AppEnvironment
 
     public static bool IsPackaged => PackageFullName is not null;
 
-    public static string? InstalledPath { get; } = IsPackaged ? Windows.ApplicationModel.Package.Current.InstalledPath : null;
+    public static string? InstalledPath { get; } = IsPackaged ? Windows.ApplicationModel.Package.Current.InstalledPath : AppContext.BaseDirectory;
+    public static string InstanceName => IsPackaged ? Windows.ApplicationModel.Package.Current.Id.FamilyName : "Cleanup.Desktop";
 
     /// <summary>
     /// Per-user writable state. Inside the package this is the package's
-    /// LocalState folder; unpackaged development runs use %LOCALAPPDATA%\Cleanup.Dev.
+    /// LocalState folder; desktop releases use %LOCALAPPDATA%\Cleanup.
     /// The app never writes to its install directory.
     /// </summary>
     public static string LocalStateDirectory { get; } = ResolveLocalState();
@@ -38,7 +39,11 @@ internal static class AppEnvironment
         }
         string directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+#if DEBUG
             "Cleanup.Dev");
+#else
+            "Cleanup");
+#endif
         Directory.CreateDirectory(directory);
         return directory;
     }

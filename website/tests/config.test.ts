@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { discordInvite, latestReleaseUrl, readConfig, wingetCommand } from '../src/config.ts';
+import { discordInvite, latestReleaseUrl, readConfig, releasePageUrl, wingetCommand } from '../src/config.ts';
 
 describe('readConfig', () => {
   test('everything stays unset by default', () => {
-    expect(readConfig({})).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null });
+    expect(readConfig({})).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null });
     expect(readConfig({ VITE_REPOSITORY_URL: '  ', VITE_DOWNLOAD_URL: '', VITE_WINGET_ID: '' }).downloadUrl).toBeNull();
   });
 
@@ -17,7 +17,7 @@ describe('readConfig', () => {
       repositoryUrl: 'https://github.com/example/cleanup',
       downloadUrl: 'https://example.com/cleanup.msix',
       wingetId: 'Example.Cleanup',
-      discordUrl: null, siteUrl: null, appInstallerUrl: null,
+      discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null,
     });
   });
 
@@ -27,9 +27,15 @@ describe('readConfig', () => {
       VITE_DOWNLOAD_URL: 'javascript:alert(1)',
       VITE_WINGET_ID: 'cleanup; rm -rf',
     });
-    expect(config).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null });
+    expect(config).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null });
     expect(readConfig({ VITE_WINGET_ID: 'NoDot' }).wingetId).toBeNull();
   });
+});
+
+test('prerelease downloads link to their tag instead of the stable-only latest route', () => {
+  const config = readConfig({ VITE_REPOSITORY_URL: 'https://github.com/wiredincorp/cleanup', VITE_DOWNLOAD_URL: 'https://github.com/wiredincorp/cleanup/releases/download/v0.1.1-rc.1/cleanup-setup.exe' });
+  expect(releasePageUrl(config)).toBe('https://github.com/wiredincorp/cleanup/releases/tag/v0.1.1-rc.1');
+  expect(releasePageUrl(readConfig({ VITE_REPOSITORY_URL: 'https://github.com/wiredincorp/cleanup' }))).toBe('https://github.com/wiredincorp/cleanup/releases');
 });
 
 test('release links use the GitHub latest release and reject unrelated paths', () => {

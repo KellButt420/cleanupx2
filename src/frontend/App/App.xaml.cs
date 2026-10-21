@@ -35,7 +35,7 @@ public partial class App : Application
         var options = SelfTestOptions.Parse(Environment.GetCommandLineArgs());
         if (!options.Enabled)
         {
-            _instanceMutex = new Mutex(true, "Local\\Cleanup.Dev.MainWindow", out bool ownsInstance);
+            _instanceMutex = new Mutex(true, $"Local\\{AppEnvironment.InstanceName}.MainWindow", out bool ownsInstance);
             if (!ownsInstance)
             {
                 foreach (Process process in Process.GetProcessesByName("Cleanup").Where(process => process.Id != Environment.ProcessId))

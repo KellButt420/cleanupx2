@@ -40,7 +40,9 @@ public sealed partial class SettingsPage : Page
         TintPresetBox.ItemsSource = TintPresets.Select(p => p.Name).ToArray();
         LoadTintControls();
 
-        VersionText.Text = "Unpackaged";
+        var desktopVersion = typeof(App).Assembly.GetName().Version;
+        VersionText.Text = desktopVersion is null ? "Desktop preview" : $"Version {desktopVersion.Major}.{desktopVersion.Minor}.{desktopVersion.Build}";
+        BuildChannelText.Text = "Desktop preview";
         if (AppEnvironment.IsPackaged)
         {
             Windows.ApplicationModel.PackageVersion v = Windows.ApplicationModel.Package.Current.Id.Version;
@@ -71,7 +73,13 @@ public sealed partial class SettingsPage : Page
             link.NavigateUri = uri;
             link.Visibility = Visibility.Visible;
         }
-        if (!AppEnvironment.IsPackaged || Windows.ApplicationModel.Package.Current.GetAppInstallerInfo() is null)
+        if (!AppEnvironment.IsPackaged)
+        {
+            CheckUpdatesButton.Content = "Check GitHub releases";
+            CheckUpdatesButton.IsEnabled = ReleaseLinks.Releases is not null;
+            UpdateStatus.Text = "Install newer versions from GitHub Releases. Reinstalling preserves your settings and history.";
+        }
+        else if (Windows.ApplicationModel.Package.Current.GetAppInstallerInfo() is null)
         {
             CheckUpdatesButton.IsEnabled = false;
             UpdateStatus.Text = "Automatic updates require a release installed through its App Installer file. This installation has no update feed.";
@@ -80,7 +88,15 @@ public sealed partial class SettingsPage : Page
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
     {
-        if (!AppEnvironment.IsPackaged) return;
+        if (!AppEnvironment.IsPackaged)
+        {
+            if (ReleaseLinks.Releases is { } releases)
+            {
+                try { await Windows.System.Launcher.LaunchUriAsync(releases); }
+                catch (Exception) { UpdateStatus.Text = "GitHub Releases could not be opened. Visit the project website for downloads."; }
+            }
+            return;
+        }
         CheckUpdatesButton.IsEnabled = false;
         UpdateStatus.Text = "Checking for updates…";
         try

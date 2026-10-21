@@ -9,7 +9,7 @@ internal static class ReleaseLinks
     public static Uri? Repository => Get("repositoryUrl");
     public static Uri? Discord => Get("discordUrl");
     public static Uri? Website => Get("siteUrl");
-    public static Uri? Releases => Repository is { } repository ? new Uri(repository.AbsoluteUri.TrimEnd('/') + "/releases" + (Get("appInstallerUrl") is not null || Get("downloadUrl") is not null ? "/latest" : "")) : null;
+    public static Uri? Releases => Repository is { } repository ? new Uri(repository.AbsoluteUri.TrimEnd('/') + "/releases") : null;
 
     private static Uri? Get(string key) => Links.TryGetValue(key, out string? value) &&
         Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) && uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo) ? uri : null;

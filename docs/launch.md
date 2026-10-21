@@ -1,85 +1,88 @@
 # Launch and updates
 
-The source repository is `https://github.com/wiredincorp/cleanup`. The site is
-configured for `https://cleanup-wiredin.vercel.app`. Support lives at
-`https://discord.gg/5kRtCcNWU6`. `release.json` holds these public links and is
-bundled into both the app and website. It never contains credentials.
+Public links live in `release.json`, shared by the app and website:
+[GitHub](https://github.com/wiredincorp/cleanup),
+[website](https://cleanup-wiredin.vercel.app), and
+[Discord](https://discord.gg/5kRtCcNWU6). This file never contains credentials.
 
-## Current release candidate
+## Desktop downloads
 
-`scripts/package-release.ps1` builds a Release MSIX using a separate production
-manifest without changing `Cleanup.Dev`. A candidate can be built unsigned:
+The primary download is a self-contained **setup EXE** built with Inno Setup.
+It installs for the current user under `%LOCALAPPDATA%\Programs\cleanup`, adds a
+Start menu shortcut, and appears in Windows Installed apps. Installation needs no
+administrator access, MSIX registration, Developer Mode, or certificate import.
+The app includes .NET, Windows App SDK / WinUI, and Visual C++ runtime files.
+
+The **portable ZIP** contains the same app. Extract the entire ZIP and run
+`Cleanup.exe`; keep the other files beside it. Settings and history still live in
+`%LOCALAPPDATA%\Cleanup`, rather than inside the extracted directory.
+
+The target is **Windows 11 x64**. ARM64 through x64 emulation is allowed by setup
+but untested. There are no macOS, Linux, Windows 10, or 32-bit builds. Compatibility
+with every operating system or company policy is not promised. The preview is
+unsigned, so Windows may show SmartScreen / publisher warnings; managed devices
+may disallow unsigned software. Trusted signing is deferred.
+
+## Build and verify
+
+On the toolchain described in [development](development.md):
 
 ```powershell
-./scripts/package-release.ps1 -Version 0.1.0.0 -IdentityName WiredIn.Cleanup `
-  -Publisher 'CN=wiredincorp' -Unsigned
+./scripts/verify-core.ps1
+./scripts/package-desktop.ps1 -Version 0.1.1
+./scripts/verify-desktop-installer.ps1 -Version 0.1.1
 ```
 
-This candidate is not a public installer. Its publisher is provisional until a
-trusted code-signing identity is selected. Keep that identity stable afterward;
-changing publisher or package name creates a different app and data location.
+The compiler helper downloads pinned Inno Setup 7.1.0 from its official GitHub
+release and checks its SHA-256 before installing it into ignored `artifacts/tools`.
+An existing compiler can be supplied with `-CompilerPath`. NuGet and Cargo use
+locked dependencies. Each publish uses a fresh payload directory.
 
-## Signed releases
+Publish only the setup EXE, portable ZIP, and `SHA256SUMS.txt` from
+`artifacts/desktop/<version>`. Payloads include dependency license/notice files in
+`Notices/`. Do not publish diagnostic reports, build paths, logs, or test fixtures.
+The Desktop installer CI workflow builds these three artifacts without publishing
+a release or accessing signing credentials.
 
-Select a publicly trusted Windows code-signing certificate or signing service.
-The certificate subject must exactly match the release Publisher. Local release
-packaging accepts a certificate thumbprint from CurrentUser/My. Self-signed
-certificates are rejected. Hardware-backed or remote signing services need their
-own signing step; the prepared GitHub workflow supports an exportable PFX.
+Local verification covers installation, unpackaged WinUI startup, native ABI,
+inventory scanning, disposable file moves, persistence, uninstall, and retaining
+app data. A normal portable launch also checks bundled runtimes load from the
+extracted directory. This is not a clean-machine or ARM64 validation result.
+Complete the remaining [release checks](release-preparation.md) before a stable release.
 
-Create a GitHub environment named `release`, require a reviewer, and configure
-`CLEANUP_SIGNING_PFX_BASE64` and `CLEANUP_SIGNING_PASSWORD` as environment secrets.
-Use GitHub's private secret entry, never commit a certificate or password.
-Run **Signed Windows release** with the version, identity, and exact publisher.
-The workflow verifies the Rust core, builds and signs the MSIX, packages the x64
-framework dependencies, generates checksums and an App Installer feed, and creates
-a draft release. Release tags are `v<four-part-version>`, such as `v0.1.0.0`.
+## Updates and existing installs
 
-Complete the clean-machine checks in [release preparation](release-preparation.md)
-before publishing that draft. Include the MSIX, all generated x64 dependency
-packages, `cleanup.appinstaller`, and `SHA256SUMS.txt` in the release assets.
-Use a strictly increasing version ending in `.0`; do not overwrite prior assets.
+Automatic updates are **not enabled** for the desktop preview. About opens GitHub
+Releases. Close cleanup and run a newer setup EXE over the existing installation;
+the stable installer AppId and install location allow replacement while settings
+and history remain in `%LOCALAPPDATA%\Cleanup`. Uninstall also keeps that data.
+For portable builds, extract a new version into a separate directory.
 
-## Automatic updates
+The desktop app has its own state and identity. It does not migrate data from
+`Cleanup.Dev` or the old MSIX candidate. Existing MSIX installations can remain
+installed while trying the desktop app.
 
-Install through `cleanup.appinstaller` to register the Windows update feed.
-Its stable URL is:
+The earlier MSIX packaging scripts and Signed Windows release workflow remain
+optional. That path requires trusted signing and validation of two releases
+before enabling App Installer updates. It is not the primary download.
+Keep `appInstallerUrl` empty for the desktop preview. A secure desktop auto-updater
+remains future work.
 
-```
-https://github.com/wiredincorp/cleanup/releases/latest/download/cleanup.appinstaller
-```
+## Publish and deploy
 
-The feed points to immutable, version-specific MSIX and framework dependency URLs.
-It checks on launch, shows the Windows update prompt, permits launching without
-updating, and enables Windows' background update task. Windows verifies the signed
-package and preserves the package's app data. Cleanup never replaces its own
-executable or terminates file operations to apply an update. About also offers a
-manual check when the installed package has an App Installer association.
+Use an immutable GitHub prerelease tag such as `v0.1.1-rc.1`; do not overwrite
+released assets. Publish all three download files, then update `downloadUrl` and
+`portableUrl` in `release.json` to version-specific asset URLs. Keep WinGet
+disabled until a matching package has been accepted upstream.
 
-Direct MSIX and development installations do not automatically gain that association.
-Updates cannot be verified end-to-end until two production-signed releases have
-been installed on a clean Windows 11 machine.
-
-See Microsoft's [App Installer update settings](https://learn.microsoft.com/en-us/windows/msix/app-installer/update-settings)
-and [feed format](https://learn.microsoft.com/en-us/windows/msix/app-installer/how-to-create-appinstaller-file).
-
-## Website deployment
-
-Vercel builds the `website` directory with Bun, with source files outside the root
-enabled so it can read `release.json`. `website/vercel.json` specifies build,
-output, asset caching, and security headers. The live deployment was built from
-the GitHub `main` commit. GitHub's Website workflow independently runs type checks,
-tests, and build. To enable automatic deployment on every push, connect
-`wiredincorp/cleanup` under this Vercel project's Settings → Git. The connector's
-automatic linking attempt returned a project-name conflict; it did not establish
-that persistent connection. Current production deployments can still be created
-from the Git source explicitly.
+Vercel builds `website` with Bun and source files outside the root enabled so it
+can read `release.json`. `website/vercel.json` defines build, output, caching, and
+security headers. Website CI independently checks types, tests, and build.
+Production deployments can be created explicitly from GitHub `main`.
+Persistent automatic Git deployment still needs the repository connected under
+the existing Vercel project's Settings → Git; the connector's linking attempt
+returned a project-name conflict.
 
 SEO is generated at build time: canonical URLs, absolute social images, software
-metadata, robots.txt, and sitemap.xml. Preview builds use noindex. Set `siteUrl`
-to the stable production domain, not a deployment-specific preview URL.
-
-The GitHub releases page stays linked until a signed release exists. Direct installation remains unavailable
-until a signed release is published. Then set `appInstallerUrl` in `release.json`
-to the feed URL and redeploy. The installer button changes to **Install for Windows**.
-Configure WinGet only after the community package has actually been accepted.
+metadata, robots.txt, and sitemap.xml. Preview builds use noindex. `siteUrl` must
+use the stable production domain.

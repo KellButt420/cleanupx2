@@ -1,4 +1,4 @@
-import { latestReleaseUrl, readConfig, wingetCommand } from './config.ts';
+import { readConfig, releasePageUrl, wingetCommand } from './config.ts';
 import release from '../../release.json';
 import { setupMotion } from './motion.ts';
 
@@ -197,7 +197,7 @@ if (config.downloadUrl) {
     link.textContent = 'Download for Windows';
   }
   setText('#download-heading', 'Ready when you are.');
-  setText('#download-description', 'Download the signed MSIX package for Windows 11 x64 and open it to install.');
+  setText('#download-description', 'Run the setup EXE to install for your Windows account. .NET and the Windows UI runtime are included—no certificate import or separate runtime installation.');
 }
 
 if (config.wingetId) {
@@ -231,8 +231,12 @@ if (config.repositoryUrl) {
 
 for (const [selector, url] of [
   ['[data-discord]', config.discordUrl],
-  ['[data-releases]', latestReleaseUrl(config.repositoryUrl)?.replace(/\/latest$/, config.downloadUrl || config.appInstallerUrl ? '/latest' : '') ?? null],
+  ['[data-releases]', releasePageUrl(config)],
+  ['[data-portable]', config.portableUrl],
 ] as const) {
+  if (selector === '[data-portable]') {
+    for (const link of $$<HTMLAnchorElement>(selector)) link.hidden = !url;
+  }
   if (!url) continue;
   for (const link of $$<HTMLAnchorElement>(selector)) {
     link.href = url;
@@ -246,7 +250,9 @@ if (config.appInstallerUrl) {
   setText('#download-description', 'Open the App Installer file to install cleanup. Windows checks for signed updates when you launch it.');
   setText('#download-footnote', 'Windows 11 x64. Updates preserve your settings and history.');
 } else if (config.downloadUrl) {
-  setText('#download-footnote', 'Windows 11 x64. Download the signed package from the release.');
+  setText('#download-footnote', 'Windows 11 x64. Unsigned preview; Windows may display a publisher or SmartScreen warning. Automatic updates are not enabled.');
+  setText('#download-platform', 'Made for Windows 11, x64. Setup EXE or portable ZIP, with runtimes included.');
+  setText('#download-status', 'Preview available on GitHub');
 }
 
 setupMotion();

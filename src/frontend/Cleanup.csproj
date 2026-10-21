@@ -30,6 +30,14 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- Desktop distribution bundles both runtimes and needs no MSIX registration. -->
+  <PropertyGroup Condition="'$(CleanupDesktop)' == 'true'">
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+  </PropertyGroup>
+
   <!-- Only the Windows App SDK components this app uses, instead of the
        metapackage (which also pulls in AI, ML, Search, and Widgets). -->
   <ItemGroup>
@@ -45,9 +53,9 @@
   <ItemGroup>
     <Page Remove="App\App.xaml" />
     <ApplicationDefinition Include="App\App.xaml" />
-    <Content Include="Assets\*.png" />
-    <Content Include="Assets\*.svg" />
-    <Content Include="Assets\*.ico" />
+    <Content Include="Assets\*.png" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\*.svg" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\*.ico" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\release.json" Link="release.json" CopyToOutputDirectory="PreserveNewest" />
@@ -79,5 +87,6 @@
     </PropertyGroup>
     <Exec Command="&quot;$(CargoExe)&quot; build --locked -p cleanup-ffi $(_CargoProfileArgument)" WorkingDirectory="$(RustWorkspaceDir)" />
   </Target>
+
 
 </Project>

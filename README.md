@@ -24,19 +24,18 @@ Made with WinUI 3 and Rust, with light and dark themes that feel at home on Wind
 
 ## Try the preview
 
-[0.1.0-rc.1 is available on GitHub](https://github.com/wiredincorp/cleanup/releases/tag/v0.1.0.0-rc.1).
-The MSIX is **unsigned** and cannot be installed through the normal trusted installation flow.
-Production signing and automatic updates are still being prepared.
+[Download Setup EXE](https://github.com/wiredincorp/cleanup/releases/download/v0.1.1-rc.1/cleanup-0.1.1-windows-x64-setup.exe) · [Portable ZIP](https://github.com/wiredincorp/cleanup/releases/download/v0.1.1-rc.1/cleanup-0.1.1-windows-x64-portable.zip)
 
-To run cleanup now, [build a development version](docs/development.md).
-You'll need Windows 11 x64, PowerShell 7, .NET 10, Rust MSVC, Visual Studio C++ Build Tools, and the Windows SDK.
+Run the installer, or extract the ZIP and open `Cleanup.exe`. The required runtimes are included—no MSIX setup, certificate import, or separate .NET installation.
+
+**Windows 11 x64.** This preview is unsigned, so Windows may show a publisher or SmartScreen warning. ARM64 emulation is unverified; macOS/Linux builds are unavailable. Automatic updates are not enabled yet.
 
 ## Build it
 
 ```powershell
 . .\scripts\env.ps1
 .\scripts\verify-core.ps1
-.\scripts\package-dev.ps1
+.\scripts\package-desktop.ps1 -Version 0.1.1
 ```
 
 See the [development guide](docs/development.md) for pinned toolchain versions, installation, and validation.

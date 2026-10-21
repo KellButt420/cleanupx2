@@ -32,6 +32,7 @@ export function seo(): Plugin {
           if (!docs) tags.push(`<script type="application/ld+json">${JSON.stringify({
             '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'cleanup', url,
             operatingSystem: 'Windows 11', applicationCategory: 'UtilitiesApplication', description,
+            downloadUrl: config.downloadUrl,
             license: 'https://opensource.org/license/mit', codeRepository: config.repositoryUrl,
             publisher: { '@type': 'Organization', name: '(wired-in) community' },
           }).replace(/</g, '\\u003c')}</script>`);

@@ -1,0 +1,32 @@
+[package]
+name = "cleanup-ffi"
+description = "C ABI for the Cleanup native core, consumed by the WinUI frontend through P/Invoke."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+name = "cleanup_native"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cleanup-core.workspace = true
+cleanup-discovery.workspace = true
+cleanup-uninstall.workspace = true
+cleanup-operations.workspace = true
+cleanup-organizer.workspace = true
+cleanup-leftovers.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+] }

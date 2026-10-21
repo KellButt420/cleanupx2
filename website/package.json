@@ -1,0 +1,22 @@
+{
+  "name": "cleanup-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "dev": "bun --bun vite",
+    "check": "bun --bun tsc -p tsconfig.json && bun --bun tsc -p tsconfig.bun.json",
+    "test": "bun test",
+    "build": "bun run check && bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "winget:prepare": "bun scripts/winget.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/bun": "latest",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.0",
+    "vite": "^8.0.0"
+  }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Cleanup.Controls.SpaceRing"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    SizeChanged="OnSizeChanged">
+    <Grid>
+        <!-- The track is the free share; the accent arc is the used share. -->
+        <Path x:Name="TrackPath" Stroke="{ThemeResource ControlStrongFillColorDefaultBrush}" />
+        <Path x:Name="UsedPath" Stroke="{ThemeResource AccentFillColorDefaultBrush}" />
+    </Grid>
+</UserControl>

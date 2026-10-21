@@ -1,0 +1,25 @@
+# Build outputs, diagnostic inventories, and machine-specific files
+artifacts/
+**/bin/
+**/obj/
+**/target/
+.vs/
+*.user
+*.suo
+*.pfx
+*.p12
+*.key
+*.dmp
+Thumbs.db
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+**/node_modules/
+**/dist/
+**/.vercel/
+.playwright-cli/
+output/
+**/winget-output/
+.claude/

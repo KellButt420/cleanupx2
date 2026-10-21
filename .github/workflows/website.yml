@@ -1,0 +1,29 @@
+name: Website
+on:
+  push:
+    paths: ['website/**', 'release.json', '.github/workflows/website.yml']
+  pull_request:
+    paths: ['website/**', 'release.json', '.github/workflows/website.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Bun
+        shell: bash
+        run: |
+          npm install --global bun@1.4.2
+      - run: bun install --frozen-lockfile
+        working-directory: website
+      - run: bun test && bun run build
+        working-directory: website
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cleanup-website
+          path: website/dist
+          if-no-files-found: error

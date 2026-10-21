@@ -1,0 +1,40 @@
+[package]
+name = "cleanup-disposable-app"
+description = "Disposable application with an official uninstaller, for Cleanup integration tests only."
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "disposable_app"
+path = "src/lib.rs"
+
+# Console tool the test harness uses to install, inspect, and purge fixtures.
+[[bin]]
+name = "cleanup-fixture"
+path = "src/main.rs"
+
+# The "installed application" and its registered uninstaller. GUI subsystem,
+# like real uninstallers, so no console is created when it is launched.
+[[bin]]
+name = "cleanup-disposable-app"
+path = "src/bin/app.rs"
+
+# Same program with a requireAdministrator manifest, registered as the
+# uninstaller of the per-machine fixture to exercise UAC handling.
+[[bin]]
+name = "cleanup-disposable-app-admin"
+path = "src/bin/admin.rs"
+
+[dependencies]
+serde_json = "1.0.154"
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+] }
+
+# Standalone: not part of the product workspace.
+[workspace]

@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+    <RootNamespace>Cleanup</RootNamespace>
+    <AssemblyTitle>cleanup</AssemblyTitle>
+    <Product>cleanup</Product>
+    <Company>cleanup contributors</Company>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <AssemblyName>Cleanup</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Cleanup.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <!-- Single-project MSIX packaging. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- .NET is not an MSIX framework package, so the runtime ships inside
+         the package. The Windows App SDK runtime is a declared framework
+         dependency instead. -->
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!-- Only the Windows App SDK components this app uses, instead of the
+       metapackage (which also pulls in AI, ML, Search, and Widgets). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <!-- WinUI 2.3.9 asks for 2.1.8, which was never published; 2.1.9 is the
+         version the 2.5.1 metapackage pins. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+    <!-- Declares the Microsoft.WindowsAppRuntime.2 framework dependency. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.5.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="App\App.xaml" />
+    <ApplicationDefinition Include="App\App.xaml" />
+    <Content Include="Assets\*.png" />
+    <Content Include="Assets\*.svg" />
+    <Content Include="Assets\*.ico" />
+    <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\release.json" Link="release.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(CleanupManifestPath)' != ''">
+    <AppxManifest Remove="@(AppxManifest)" />
+    <AppxManifest Include="$(CleanupManifestPath)" />
+  </ItemGroup>
+
+  <!-- Native core: built with cargo before compilation and bundled next to
+       the executable so it is loaded from the package's install directory. -->
+  <PropertyGroup>
+    <RustWorkspaceDir>$(MSBuildThisFileDirectory)..\rust\</RustWorkspaceDir>
+    <RustProfile Condition="'$(Configuration)' == 'Release'">release</RustProfile>
+    <RustProfile Condition="'$(RustProfile)' == ''">debug</RustProfile>
+    <RustOutputDir>$(RustWorkspaceDir)target\$(RustProfile)\</RustOutputDir>
+    <CargoExe Condition="'$(CargoExe)' == '' and Exists('$(USERPROFILE)\.cargo\bin\cargo.exe')">$(USERPROFILE)\.cargo\bin\cargo.exe</CargoExe>
+    <CargoExe Condition="'$(CargoExe)' == ''">cargo</CargoExe>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(RustOutputDir)cleanup_native.dll" Link="cleanup_native.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="BuildNativeCore" BeforeTargets="BeforeBuild" Condition="'$(SkipNativeBuild)' != 'true'">
+    <PropertyGroup>
+      <_CargoProfileArgument Condition="'$(RustProfile)' == 'release'">--release</_CargoProfileArgument>
+    </PropertyGroup>
+    <Exec Command="&quot;$(CargoExe)&quot; build --locked -p cleanup-ffi $(_CargoProfileArgument)" WorkingDirectory="$(RustWorkspaceDir)" />
+  </Target>
+
+</Project>

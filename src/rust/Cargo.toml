@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/core",
+    "crates/discovery",
+    "crates/uninstall",
+    "crates/operations",
+    "crates/organizer",
+    "crates/leftovers",
+    "crates/ffi",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+license = "MIT"
+
+[workspace.dependencies]
+cleanup-core = { path = "crates/core" }
+cleanup-discovery = { path = "crates/discovery" }
+cleanup-uninstall = { path = "crates/uninstall" }
+cleanup-operations = { path = "crates/operations" }
+cleanup-organizer = { path = "crates/organizer" }
+cleanup-leftovers = { path = "crates/leftovers" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+windows = "0.62.2"
+windows-future = "0.3.2"
+windows-sys = "0.61.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"

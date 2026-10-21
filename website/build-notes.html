@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fcfbfe" />
+    <meta name="description" content="Build notes, release status, and WinGet availability for cleanup, a native Windows 11 app." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Build notes — cleanup</title>
+    <script>
+      try { const t = localStorage.getItem('cleanup-theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark'; } catch {}
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+        document.documentElement.dataset.motion = 'pending';
+        setTimeout(() => { if (document.documentElement.dataset.motion === 'pending') delete document.documentElement.dataset.motion; }, 1800);
+      }
+    </script>
+    <style>
+      html { background: #fcfbfe; color-scheme: light; }
+      html[data-theme="dark"] { background: #17151e; color-scheme: dark; }
+      html[data-motion="pending"] main { opacity: 0; }
+      html[data-motion="pending"] .site-header .brand > :first-child { opacity: 0; }
+    </style>
+    <link rel="stylesheet" href="/src/style.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14A8.5 8.5 0 0 1 10 3.5 8.5 8.5 0 1 0 20.5 14Z"/></symbol>
+      </defs>
+    </svg>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="header-surface">
+      <header class="site-header shell flex items-center justify-between gap-5">
+        <a class="brand flex items-center gap-2.5" href="/" aria-label="cleanup home"><img src="/logo.svg" alt="" width="26" height="26" /><span>cleanup</span></a>
+        <div class="flex items-center gap-3">
+          <button class="theme-toggle icon-button" type="button" aria-label="Switch to dark theme"><svg class="icon"><use href="#i-moon" /></svg></button>
+          <a class="button button-small" href="/">Back to cleanup</a>
+        </div>
+      </header>
+    </div>
+
+    <main id="main" class="docs-main">
+      <h1>Build notes</h1>
+      <p>cleanup is a native Windows 11 app built with C#, .NET 10, and WinUI 3, with a Rust library for discovery, uninstall, and file operations. It is a development build, not a production release.</p>
+
+      <div class="docs-notice"><p>The source is on <a href="https://github.com/wiredincorp/cleanup">GitHub</a>. A production-signed public installer and WinGet package are still being prepared. Development builds are signed with a local certificate and should not be shared as releases.</p></div>
+
+      <h2>Release status</h2>
+      <ul>
+        <li>Signed MSIX installation and fixture workflows pass on the development machine.</li>
+        <li>Clean-machine release certification and production signing are pending.</li>
+        <li>Memory use is above the original target, so the project makes no performance claims.</li>
+        <li>Windows 11 x64 only. ARM64, macOS, and Linux builds are not planned for the first release.</li>
+      </ul>
+
+      <h2>Build from source</h2>
+      <p>Install .NET SDK 10.0.402 or a later .NET 10 SDK, Rust 1.99.0 (MSVC), Visual Studio 2022 C++ Build Tools, Windows SDK 10.0.26100.0, and PowerShell 7. From the repository root:</p>
+      <pre><code>. .\scripts\env.ps1
+.\scripts\verify-core.ps1
+.\scripts\package-dev.ps1</code></pre>
+
+      <h3>Install a development build</h3>
+      <p>Trust the public development signer once from an <strong>elevated</strong> PowerShell, then install from a normal one:</p>
+      <pre><code># Elevated, once
+.\packaging\Trust-DevCertificate.ps1
+
+# Normal PowerShell
+.\scripts\install-dev.ps1 -Mode Msix</code></pre>
+      <p>Remove development trust later with <code>.\packaging\Trust-DevCertificate.ps1 -Remove</code>.</p>
+
+      <h2 id="winget">WinGet</h2>
+      <p>cleanup isn’t in the WinGet community repository yet. Publishing needs three things that don’t exist so far: a public release download, a production-signed MSIX, and a registered package identifier.</p>
+      <p>The website includes a manifest generator for that first release. It hashes the published MSIX and writes version, locale, and installer manifests in the layout <code>winget-pkgs</code> expects:</p>
+      <pre><code>cd website
+bun run winget:prepare --id Publisher.Cleanup --version 1.0.0 \
+  --url https://example.com/cleanup-1.0.0-x64.msix \
+  --file ..\artifacts\release\cleanup-1.0.0-x64.msix \
+  --publisher "cleanup contributors"
+
+winget validate --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0
+winget install --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0</code></pre>
+      <p>Validate and test-install locally, then submit the folder as a pull request to <a href="https://github.com/microsoft/winget-pkgs">microsoft/winget-pkgs</a>. Once the package is accepted, set <code>VITE_WINGET_ID</code> and the WinGet tab on the home page shows the install command.</p>
+
+      <h2>Updates and support</h2><p>Release installations will use Windows App Installer to check for signed updates on launch. Direct development MSIX installs do not have an update feed. Your settings and history stay in Windows-managed app data.</p><p>Find downloads on <a href="https://github.com/wiredincorp/cleanup/releases" data-releases>GitHub Releases</a>, or get help in <a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord</a>.</p><h2>What cleanup won’t do</h2>
+      <p>It isn’t a registry cleaner, a PC booster, or a debloater. It doesn’t run in the background. Uninstalls always use the application’s official uninstaller after you confirm the list, and leftovers get their own review with nothing preselected.</p>
+    </main>
+
+    <footer class="site-footer shell flex flex-wrap items-center justify-between gap-6"><a class="brand flex items-center gap-2.5" href="/"><img src="/logo.svg" alt="" width="22" height="22" /><span>cleanup</span></a><p>A little less. A little better.</p><div class="flex items-center gap-6"><a href="/">Home</a><a href="/build-notes.html" aria-current="page">Build notes</a><a href="https://github.com/wiredincorp/cleanup" data-repository>GitHub</a><a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord support</a><a href="/LICENSE.txt">MIT license</a><span>©(wired-in) community</span></div></footer>
+  </body>
+</html>

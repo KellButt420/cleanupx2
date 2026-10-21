@@ -1,0 +1,18 @@
+<Page x:Class="Cleanup.Views.CreditsPage"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ KeyboardAcceleratorPlacementMode="Hidden">
+ <Page.KeyboardAccelerators>
+  <KeyboardAccelerator Key="Escape" Invoked="OnBackInvoked"/>
+  <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="OnBackInvoked"/>
+ </Page.KeyboardAccelerators>
+ <!-- Back lives in the title bar (MainWindow.TitleBackButton). -->
+ <Grid x:Name="CanvasRoot" Background="Transparent">
+  <StackPanel x:Name="CreditsContent" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Margin="24,0,24,48">
+   <Image Width="200" Height="200" Margin="0,0,0,12" Source="ms-appx:///Assets/ForthesceneLogo.png" AutomationProperties.Name="forthescene logo"/>
+   <TextBlock Text="forthescene" HorizontalAlignment="Center" FontSize="28" FontWeight="SemiBold"/>
+   <TextBlock Text="a (wired-in) project" HorizontalAlignment="Center" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+   <TextBlock x:Name="YearText" HorizontalAlignment="Center" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+  </StackPanel>
+ </Grid>
+</Page>

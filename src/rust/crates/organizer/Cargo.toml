@@ -1,0 +1,18 @@
+[package]
+name = "cleanup-organizer"
+description = "Folder organizer: dry-run planning, safe moves, journaling, and undo."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cleanup-discovery.workspace = true
+cleanup-core.workspace = true
+cleanup-operations.workspace = true
+serde.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+] }

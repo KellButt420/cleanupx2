@@ -1,0 +1,98 @@
+name: Signed Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'MSIX version, for example 0.1.0.0 (revision must be 0)'
+        required: true
+      identity:
+        description: 'Stable production MSIX identity (not Cleanup.Dev)'
+        required: true
+        default: 'WiredIn.Cleanup'
+      publisher:
+        description: 'Exact subject of your trusted code-signing certificate'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-2025
+    environment: release
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Install pinned Rust
+        run: |
+          $pin = [regex]::Match((Get-Content rust-toolchain.toml -Raw), 'channel\s*=\s*"([^"]+)"').Groups[1].Value
+          rustup toolchain install $pin --profile minimal --component clippy,rustfmt --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed.' }
+      - name: Verify native core
+        run: ./scripts/verify-core.ps1
+      - name: Sign and prepare release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_IDENTITY: ${{ inputs.identity }}
+          RELEASE_PUBLISHER: ${{ inputs.publisher }}
+          SIGNING_PFX: ${{ secrets.CLEANUP_SIGNING_PFX_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.CLEANUP_SIGNING_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SIGNING_PFX -or -not $env:SIGNING_PASSWORD) { throw 'Configure the production signing secrets on the protected release environment.' }
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'cleanup-signing.pfx'
+          $certificate = $null
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_PFX))
+            $password = ConvertTo-SecureString $env:SIGNING_PASSWORD -AsPlainText -Force
+            $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+            ./scripts/package-release.ps1 -Version $env:RELEASE_VERSION -IdentityName $env:RELEASE_IDENTITY -Publisher $env:RELEASE_PUBLISHER -CertificateThumbprint $certificate.Thumbprint
+            $root = Join-Path $PWD "artifacts/release/$env:RELEASE_VERSION"
+            $package = Join-Path $root "cleanup-$env:RELEASE_VERSION-x64.msix"
+            $dependencies = @(Get-ChildItem "$root/packages" -Recurse -File | Where-Object { $_.FullName -match '[\\/]Dependencies[\\/]x64[\\/]' -and $_.Extension -in '.msix','.appx' })
+            foreach ($dependency in $dependencies) { Copy-Item -LiteralPath $dependency.FullName -Destination $root }
+            $releaseBase = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v$env:RELEASE_VERSION"
+            $feed = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/cleanup.appinstaller"
+            ./scripts/new-appinstaller.ps1 -Package $package -DependencyPackages @($dependencies | ForEach-Object { Join-Path $root $_.Name }) -ReleaseBaseUrl $releaseBase -FeedUrl $feed -Output "$root/cleanup.appinstaller"
+            $assets = Get-ChildItem $root -File | Where-Object { $_.Extension -in '.msix','.appx','.appinstaller' }
+            $assets | ForEach-Object { '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name } | Set-Content "$root/SHA256SUMS.txt"
+          } finally {
+            if ($certificate) { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue }
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: signed-release-${{ inputs.version }}
+          if-no-files-found: error
+          path: |
+            artifacts/release/${{ inputs.version }}/*.msix
+            artifacts/release/${{ inputs.version }}/*.appx
+            artifacts/release/${{ inputs.version }}/*.appinstaller
+            artifacts/release/${{ inputs.version }}/SHA256SUMS.txt
+  draft:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: signed-release-${{ inputs.version }}
+          path: release-assets
+      - name: Create draft release for final installation checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_COMMIT" --draft --title "cleanup $RELEASE_VERSION" --notes "Signed Windows 11 x64 release. Install with cleanup.appinstaller to enable Windows-managed updates. Complete clean-machine verification before publishing." release-assets/*

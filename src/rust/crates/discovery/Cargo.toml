@@ -1,0 +1,25 @@
+[package]
+name = "cleanup-discovery"
+description = "Installed-application discovery: uninstall registry entries, Windows Installer products, and MSIX packages."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cleanup-core.workspace = true
+serde.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_ApplicationInstallationAndServicing",
+    "Win32_System_Environment",
+    "Win32_System_Registry",
+] }
+windows = { workspace = true, features = [
+    "ApplicationModel",
+    "Foundation",
+    "Foundation_Collections",
+    "Management_Deployment",
+    "Win32_System_WinRT",
+] }

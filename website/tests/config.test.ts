@@ -1,0 +1,50 @@
+import { describe, expect, test } from 'bun:test';
+import { discordInvite, latestReleaseUrl, readConfig, wingetCommand } from '../src/config.ts';
+
+describe('readConfig', () => {
+  test('everything stays unset by default', () => {
+    expect(readConfig({})).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null });
+    expect(readConfig({ VITE_REPOSITORY_URL: '  ', VITE_DOWNLOAD_URL: '', VITE_WINGET_ID: '' }).downloadUrl).toBeNull();
+  });
+
+  test('accepts https links and real-looking package ids', () => {
+    const config = readConfig({
+      VITE_REPOSITORY_URL: 'https://github.com/example/cleanup',
+      VITE_DOWNLOAD_URL: 'https://example.com/cleanup.msix',
+      VITE_WINGET_ID: 'Example.Cleanup',
+    });
+    expect(config).toEqual({
+      repositoryUrl: 'https://github.com/example/cleanup',
+      downloadUrl: 'https://example.com/cleanup.msix',
+      wingetId: 'Example.Cleanup',
+      discordUrl: null, siteUrl: null, appInstallerUrl: null,
+    });
+  });
+
+  test('rejects insecure or unsafe values', () => {
+    const config = readConfig({
+      VITE_REPOSITORY_URL: 'http://example.com',
+      VITE_DOWNLOAD_URL: 'javascript:alert(1)',
+      VITE_WINGET_ID: 'cleanup; rm -rf',
+    });
+    expect(config).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null });
+    expect(readConfig({ VITE_WINGET_ID: 'NoDot' }).wingetId).toBeNull();
+  });
+});
+
+test('release links use the GitHub latest release and reject unrelated paths', () => {
+  expect(latestReleaseUrl('https://github.com/wiredincorp/cleanup/')).toBe('https://github.com/wiredincorp/cleanup/releases/latest');
+  expect(latestReleaseUrl('https://example.com/wiredincorp/cleanup')).toBeNull();
+  expect(latestReleaseUrl('https://github.com/wiredincorp/cleanup/issues')).toBeNull();
+});
+
+test('Discord links are invites and environment overrides public defaults', () => {
+  expect(discordInvite('https://discord.gg/5kRtCcNWU6')).toBe('https://discord.gg/5kRtCcNWU6');
+  expect(discordInvite('https://discord.gg.evil.test/5kRtCcNWU6')).toBeNull();
+  expect(discordInvite('https://user:password@discord.gg/5kRtCcNWU6')).toBeNull();
+  expect(readConfig({ VITE_DISCORD_URL: '' }, { discordUrl: 'https://discord.gg/5kRtCcNWU6' }).discordUrl).toBeNull();
+});
+
+test('wingetCommand pins the exact id and community source', () => {
+  expect(wingetCommand('Example.Cleanup')).toBe('winget install --id Example.Cleanup --exact --source winget');
+});

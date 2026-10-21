@@ -1,0 +1,20 @@
+[package]
+name = "cleanup-leftovers"
+description = "Leftover review after an official uninstall: attributable folders, shortcuts, and registry keys."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+cleanup-core.workspace = true
+cleanup-operations.workspace = true
+serde.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+] }

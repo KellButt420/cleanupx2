@@ -8,7 +8,7 @@ licensed under [MIT](LICENSE); dependencies retain their own licenses.
 
 Use Windows 11 x64, PowerShell 7, the .NET SDK in `global.json`, the Rust toolchain
 in `rust-toolchain.toml`, Visual Studio C++ Build Tools and Windows SDK 26100.
-See [README](README.md) for certificate trust and installation instructions.
+See the [development guide](docs/development.md) for certificate trust and installation instructions.
 
 ```powershell
 .\scripts\verify-core.ps1

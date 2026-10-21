@@ -1,7 +1,7 @@
 # cleanup website
 
 The product site for cleanup. Bun, Vite 8, TypeScript, and Tailwind CSS 4, with no
-framework. It is two static HTML pages plus about 150 lines of TypeScript.
+framework. It is two static HTML pages with progressive TypeScript interactions.
 
 ```powershell
 bun install
@@ -15,15 +15,18 @@ bun run build      # check + static output in dist/
 
 ## Release links
 
-The site advertises nothing that doesn't exist. Download, source, and WinGet links stay
-hidden until they're configured at build time. Copy `.env.example` to `.env`, or set the
-variables in the hosting provider:
+Public GitHub, Discord, and production-site links come from `../release.json`,
+shared with the Windows app. Direct downloads and WinGet stay unavailable until
+their signed releases exist. Environment variables can override those defaults:
 
 | Variable | Effect |
 | --- | --- |
 | `VITE_DOWNLOAD_URL` | Turns the Windows tab into a download button. Must be `https://`. |
 | `VITE_REPOSITORY_URL` | Shows the source links in the footer and the open-source section. |
 | `VITE_WINGET_ID` | Shows `winget install --id <id> --exact --source winget` with a copy button. |
+| `VITE_DISCORD_URL` | Overrides the Discord support invite. |
+| `VITE_SITE_URL` | Sets the canonical production origin for SEO and sitemap generation. |
+| `VITE_APP_INSTALLER_URL` | Enables installation through the signed, Windows-managed update feed. |
 
 Invalid values, such as non-HTTPS URLs or malformed package IDs, are ignored rather
 than rendered. Every `VITE_` value ends up in public JavaScript, so never put secrets in them.

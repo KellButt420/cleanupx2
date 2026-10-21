@@ -67,14 +67,19 @@ and [feed format](https://learn.microsoft.com/en-us/windows/msix/app-installer/h
 
 Vercel builds the `website` directory with Bun, with source files outside the root
 enabled so it can read `release.json`. `website/vercel.json` specifies build,
-output, asset caching, and security headers. Git integration deploys changes from
-`main`; GitHub's Website workflow independently runs type checks, tests, and build.
+output, asset caching, and security headers. The live deployment was built from
+the GitHub `main` commit. GitHub's Website workflow independently runs type checks,
+tests, and build. To enable automatic deployment on every push, connect
+`wiredincorp/cleanup` under this Vercel project's Settings → Git. The connector's
+automatic linking attempt returned a project-name conflict; it did not establish
+that persistent connection. Current production deployments can still be created
+from the Git source explicitly.
 
 SEO is generated at build time: canonical URLs, absolute social images, software
 metadata, robots.txt, and sitemap.xml. Preview builds use noindex. Set `siteUrl`
 to the stable production domain, not a deployment-specific preview URL.
 
-The latest-release link stays visible. Direct installation remains unavailable
+The GitHub releases page stays linked until a signed release exists. Direct installation remains unavailable
 until a signed release is published. Then set `appInstallerUrl` in `release.json`
 to the feed URL and redeploy. The installer button changes to **Install for Windows**.
 Configure WinGet only after the community package has actually been accepted.

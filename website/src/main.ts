@@ -1,4 +1,4 @@
-import { readConfig, releasePageUrl, wingetCommand } from './config.ts';
+import { readConfig, releasePageUrl } from './config.ts';
 import release from '../../release.json';
 import { setupMotion } from './motion.ts';
 
@@ -13,16 +13,20 @@ const setText = (selector: string, text: string) => {
 // Compact navigation uses the same destinations as the desktop header.
 const menuToggle = $<HTMLButtonElement>('.menu-toggle');
 const navigation = $('#main-navigation');
-function closeMenu() {
-  menuToggle?.setAttribute('aria-expanded', 'false');
-  menuToggle?.setAttribute('aria-label', 'Open navigation');
-  navigation?.classList.remove('is-open');
+const headerSurface = $('.header-surface');
+function setMenu(open: boolean) {
+  menuToggle?.setAttribute('aria-expanded', String(open));
+  menuToggle?.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+  menuToggle?.querySelector('use')?.setAttribute('href', open ? '#i-close' : '#i-menu');
+  navigation?.classList.toggle('is-open', open);
+  headerSurface?.classList.toggle('is-menu-open', open);
 }
+const closeMenu = () => setMenu(false);
 menuToggle?.addEventListener('click', () => {
   const open = menuToggle.getAttribute('aria-expanded') !== 'true';
-  menuToggle.setAttribute('aria-expanded', String(open));
-  menuToggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-  navigation?.classList.toggle('is-open', open);
+  setMenu(open);
+  // The sheet sits before the toggle in source order, so bring focus into it.
+  if (open) navigation?.querySelector('a')?.focus();
 });
 navigation?.addEventListener('click', (event) => {
   if (event.target instanceof Element && event.target.closest('a')) closeMenu();
@@ -37,6 +41,11 @@ document.addEventListener('click', (event) => {
   if (event.target instanceof Node && !menuToggle?.contains(event.target) && !navigation?.contains(event.target)) closeMenu();
 });
 matchMedia('(min-width: 768px)').addEventListener('change', closeMenu);
+
+// A hairline appears under the header once content scrolls beneath it.
+const markScrolled = () => headerSurface?.classList.toggle('is-scrolled', scrollY > 4);
+addEventListener('scroll', markScrolled, { passive: true });
+markScrolled();
 
 // Tabs: shared by the preview rail and the install panel (WAI-ARIA tabs pattern).
 function setupTabs(tabs: HTMLButtonElement[]) {
@@ -171,52 +180,35 @@ $('#organize-undo')?.addEventListener('click', () => {
 });
 
 // Theme.
-const themeToggle = $<HTMLButtonElement>('.theme-toggle');
-const themeIcon = $<SVGUseElement>('.theme-toggle use');
+// The header has an icon-only toggle; the compact menu has a labelled one.
+const themeToggles = $$<HTMLButtonElement>('.theme-toggle');
 const themeColor = $<HTMLMetaElement>('meta[name="theme-color"]');
+const systemTheme = matchMedia('(prefers-color-scheme: dark)');
 
 function applyTheme(dark: boolean) {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  themeIcon?.setAttribute('href', dark ? '#i-sun' : '#i-moon');
-  themeToggle?.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
-  themeColor?.setAttribute('content', dark ? '#17151e' : '#fcfbfe');
+  for (const toggle of themeToggles) {
+    $('use', toggle)?.setAttribute('href', dark ? '#i-sun' : '#i-moon');
+    const label = $('[data-theme-label]', toggle);
+    if (label) label.textContent = dark ? 'Use light theme' : 'Use dark theme';
+    else toggle.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  }
+  themeColor?.setAttribute('content', dark ? '#1b1b1b' : '#f7f8f7');
 }
 
 applyTheme(document.documentElement.dataset.theme === 'dark');
-themeToggle?.addEventListener('click', () => {
-  const dark = document.documentElement.dataset.theme !== 'dark';
-  applyTheme(dark);
-  try { localStorage.setItem('cleanup-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
-});
-
-// Release links, only when configured.
-if (config.downloadUrl) {
-  const link = $<HTMLAnchorElement>('#download-link');
-  if (link) {
-    link.href = config.downloadUrl;
-    link.textContent = 'Download for Windows';
+systemTheme.addEventListener('change', (event) => {
+  try {
+    if (!localStorage.getItem('cleanup-theme')) applyTheme(event.matches);
+  } catch {
+    applyTheme(event.matches);
   }
-  setText('#download-heading', 'Ready when you are.');
-  setText('#download-description', 'Run the setup EXE to install for your Windows account. .NET and the Windows UI runtime are included—no certificate import or separate runtime installation.');
-}
-
-if (config.wingetId) {
-  const command = wingetCommand(config.wingetId);
-  const line = $('.command-line');
-  const code = $('#winget-command');
-  const copy = $<HTMLButtonElement>('#copy-winget');
-  const copyStatus = $('#copy-status');
-  if (code) code.textContent = command;
-  if (line) line.hidden = false;
-  setText('#winget-description', 'Install from the WinGet community repository. Updates arrive with winget upgrade.');
-  setText('#winget-faq', `Yes. Run ${command} in a terminal.`);
-  copy?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      if (copyStatus) copyStatus.textContent = 'Copied to clipboard.';
-    } catch {
-      if (copyStatus) copyStatus.textContent = 'Copy failed. Select the command to copy it.';
-    }
+});
+for (const toggle of themeToggles) {
+  toggle.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    applyTheme(dark);
+    try { localStorage.setItem('cleanup-theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
   });
 }
 
@@ -233,26 +225,16 @@ for (const [selector, url] of [
   ['[data-discord]', config.discordUrl],
   ['[data-releases]', releasePageUrl(config)],
   ['[data-setup]', config.setupUrl],
+  ['[data-download]', config.portableUrl],
 ] as const) {
-  if (selector === '[data-setup]') {
-    for (const link of $$<HTMLAnchorElement>(selector)) link.hidden = !url;
-  }
-  if (!url) continue;
   for (const link of $$<HTMLAnchorElement>(selector)) {
-    link.href = url;
-    link.hidden = false;
+    if (url) {
+      link.href = url;
+      link.hidden = false;
+    } else if (selector === '[data-setup]' || selector === '[data-download]') {
+      link.hidden = true;
+    }
   }
-}
-if (config.appInstallerUrl) {
-  const link = $<HTMLAnchorElement>('#download-link');
-  if (link) { link.href = config.appInstallerUrl; link.textContent = 'Install for Windows'; }
-  setText('#download-heading', 'Ready when you are.');
-  setText('#download-description', 'Open the App Installer file to install cleanup. Windows checks for signed updates when you launch it.');
-  setText('#download-footnote', 'Windows 11 x64. Updates preserve your settings and history.');
-} else if (config.downloadUrl) {
-  setText('#download-footnote', 'Windows 11 x64. Unsigned preview: if Windows says “Windows protected your PC”, choose More info, then Run anyway.');
-  setText('#download-platform', 'Made for Windows 11, x64. One file, runtimes included.');
-  setText('#download-status', 'Preview available on GitHub');
 }
 
 setupMotion();

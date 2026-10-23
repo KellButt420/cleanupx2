@@ -1,4 +1,8 @@
-param([ValidatePattern('^\d+\.\d+\.\d+$')] [string] $Version = '0.1.2')
+param(
+    [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $Version = '0.1.2',
+    # Hosted CI runners always run as administrator; local checks must not.
+    [switch] $AllowElevated
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $exe = Join-Path $root "artifacts/desktop/$Version/Cleanup.exe"
@@ -39,7 +43,7 @@ $expectedState = Join-Path $env:LOCALAPPDATA 'Cleanup'
 if ([IO.Path]::GetFullPath($report.process.localStateDirectory) -ne [IO.Path]::GetFullPath($expectedState)) {
     throw 'Portable app data is not stored under the current user LocalAppData directory.'
 }
-if ($report.nativeCore.environment.elevated) { throw 'Portable app self-test unexpectedly ran elevated.' }
+if ($report.nativeCore.environment.elevated -and -not $AllowElevated) { throw 'Portable app self-test unexpectedly ran elevated.' }
 # The .NET runtime is linked into the single-file host, so coreclr.dll is not
 # extracted; WinUI and the Rust core must load from the fresh extraction.
 $extractDirectory = Split-Path $report.nativeCore.environment.nativeLibraryPath

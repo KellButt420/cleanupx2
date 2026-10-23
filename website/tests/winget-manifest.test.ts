@@ -36,6 +36,7 @@ describe('buildManifests', () => {
     expect(installer).toContain('InstallerType: "portable"');
     expect(installer).toContain('Commands:\n- "cleanup"');
     expect(installer).not.toContain('Dependencies');
+    expect(installer).not.toContain('Scope');
   });
 
   test('round-trips through a YAML parser', () => {

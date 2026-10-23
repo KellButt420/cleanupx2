@@ -115,7 +115,8 @@ export function buildManifests(input: ReleaseInput): ManifestFile[] {
     InstallerType: type,
     // Portable installs get a `cleanup` command alias in WinGet's Links folder.
     Commands: type === 'portable' ? ['cleanup'] : undefined,
-    Scope: 'user',
+    // WinGet rejects Scope for portable installers; they are always per user.
+    Scope: type === 'portable' ? undefined : 'user',
     UpgradeBehavior: 'install',
     PackageFamilyName: release.packageFamilyName,
     Dependencies: dependencies,

@@ -1,9 +1,10 @@
-// bun run winget:prepare --id Publisher.Cleanup --version 1.0.0 --url https://…/cleanup.msix --file ./cleanup.msix --publisher "…"
+// bun run winget:prepare --id Publisher.Cleanup --version 1.0.0 --url https://…/Cleanup.exe --file ./Cleanup.exe --publisher "…"
+// The URL extension selects the installer type: .exe (portable) or .msix.
 // Writes manifests to winget-output/. Never submits anything.
 
 import { parseArgs } from 'node:util';
 import { join } from 'node:path';
-import { buildManifests, parseDependency, validate, type ReleaseInput } from './winget-manifest.ts';
+import { buildManifests, installerType, parseDependency, validate, type ReleaseInput } from './winget-manifest.ts';
 
 const { values } = parseArgs({
   options: {
@@ -27,8 +28,8 @@ const { values } = parseArgs({
 });
 
 if (values.help) {
-  console.log(`Usage: bun run winget:prepare --id <Publisher.Package> --version <x.y.z> --url <https://…/cleanup.msix>
-  (--file <local .msix> | --sha256 <hash>) --publisher <name>
+  console.log(`Usage: bun run winget:prepare --id <Publisher.Package> --version <x.y.z> --url <https://…/Cleanup.exe | https://…/cleanup.msix>
+  (--file <local file> | --sha256 <hash>) --publisher <name>
   [--publisher-url] [--package-url] [--license-url] [--release-notes-url]
   [--package-family-name] [--signature-sha256] [--dependency <Id[@MinVersion]>]… [--out <dir>]`);
   process.exit(0);
@@ -74,5 +75,5 @@ for (const manifest of buildManifests(input)) {
   console.log(`wrote ${target}`);
 }
 
-if (!input.packageFamilyName) console.warn('note: --package-family-name not set; WinGet matches upgrades more reliably with it.');
+if (!input.packageFamilyName && installerType(input.url) === 'msix') console.warn('note: --package-family-name not set; WinGet matches upgrades more reliably with it.');
 console.log('\nNext: winget validate --manifest <folder>, then winget install --manifest <folder> on a clean machine.');

@@ -3,7 +3,7 @@ import { discordInvite, latestReleaseUrl, readConfig, releasePageUrl, wingetComm
 
 describe('readConfig', () => {
   test('everything stays unset by default', () => {
-    expect(readConfig({})).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null });
+    expect(readConfig({})).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, setupUrl: null });
     expect(readConfig({ VITE_REPOSITORY_URL: '  ', VITE_DOWNLOAD_URL: '', VITE_WINGET_ID: '' }).downloadUrl).toBeNull();
   });
 
@@ -17,7 +17,7 @@ describe('readConfig', () => {
       repositoryUrl: 'https://github.com/example/cleanup',
       downloadUrl: 'https://example.com/cleanup.msix',
       wingetId: 'Example.Cleanup',
-      discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null,
+      discordUrl: null, siteUrl: null, appInstallerUrl: null, setupUrl: null,
     });
   });
 
@@ -27,7 +27,7 @@ describe('readConfig', () => {
       VITE_DOWNLOAD_URL: 'javascript:alert(1)',
       VITE_WINGET_ID: 'cleanup; rm -rf',
     });
-    expect(config).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, portableUrl: null });
+    expect(config).toEqual({ repositoryUrl: null, downloadUrl: null, wingetId: null, discordUrl: null, siteUrl: null, appInstallerUrl: null, setupUrl: null });
     expect(readConfig({ VITE_WINGET_ID: 'NoDot' }).wingetId).toBeNull();
   });
 });

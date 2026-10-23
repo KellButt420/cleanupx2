@@ -38,13 +38,16 @@ public partial class App : Application
             _instanceMutex = new Mutex(true, $"Local\\{AppEnvironment.InstanceName}.MainWindow", out bool ownsInstance);
             if (!ownsInstance)
             {
-                foreach (Process process in Process.GetProcessesByName("Cleanup").Where(process => process.Id != Environment.ProcessId))
+                // A downloaded copy may be saved as "Cleanup (1).exe"; match this process's own name.
+                string processName = Path.GetFileNameWithoutExtension(Environment.ProcessPath) ?? "Cleanup";
+                foreach (Process process in Process.GetProcessesByName(processName).Where(process => process.Id != Environment.ProcessId))
                 {
                     if (process.MainWindowHandle == 0) continue;
                     ShowWindow(process.MainWindowHandle, 9); SetForegroundWindow(process.MainWindowHandle); break;
                 }
                 Exit(); return;
             }
+            ExtractionCache.RemoveStaleInBackground();
         }
         // The feasibility window is only used by the automated test harness.
         MainWindow = options.Enabled ? new FeasibilityWindow(options) : new MainWindow();

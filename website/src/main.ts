@@ -232,9 +232,9 @@ if (config.repositoryUrl) {
 for (const [selector, url] of [
   ['[data-discord]', config.discordUrl],
   ['[data-releases]', releasePageUrl(config)],
-  ['[data-portable]', config.portableUrl],
+  ['[data-setup]', config.setupUrl],
 ] as const) {
-  if (selector === '[data-portable]') {
+  if (selector === '[data-setup]') {
     for (const link of $$<HTMLAnchorElement>(selector)) link.hidden = !url;
   }
   if (!url) continue;
@@ -250,8 +250,8 @@ if (config.appInstallerUrl) {
   setText('#download-description', 'Open the App Installer file to install cleanup. Windows checks for signed updates when you launch it.');
   setText('#download-footnote', 'Windows 11 x64. Updates preserve your settings and history.');
 } else if (config.downloadUrl) {
-  setText('#download-footnote', 'Windows 11 x64. Unsigned preview; Windows may display a publisher or SmartScreen warning. Automatic updates are not enabled.');
-  setText('#download-platform', 'Made for Windows 11, x64. Setup EXE or portable ZIP, with runtimes included.');
+  setText('#download-footnote', 'Windows 11 x64. Unsigned preview: if Windows says “Windows protected your PC”, choose More info, then Run anyway.');
+  setText('#download-platform', 'Made for Windows 11, x64. One file, runtimes included.');
   setText('#download-status', 'Preview available on GitHub');
 }
 

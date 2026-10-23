@@ -1,5 +1,6 @@
 // Builds the three WinGet manifests (version, default locale, installer) for an
-// MSIX release. Pure: takes release facts, returns files. No network, no disk.
+// MSIX package or the portable Cleanup.exe, chosen by the installer URL's
+// extension. Pure: takes release facts, returns files. No network, no disk.
 
 export const MANIFEST_VERSION = '1.10.0';
 
@@ -59,7 +60,10 @@ export function validate(input: ReleaseInput): string[] {
   ] as const) {
     if (value !== undefined && !isHttps(value)) errors.push(`${flag} must be an https:// URL.`);
   }
-  if (!input.url.toLowerCase().split('?')[0]!.endsWith('.msix')) errors.push('--url must point to the .msix package.');
+  if (!installerType(input.url)) errors.push('--url must point to the .msix package or portable .exe.');
+  if (installerType(input.url) === 'portable' && (input.packageFamilyName || input.dependencies?.length)) {
+    errors.push('--package-family-name and --dependency apply only to MSIX packages.');
+  }
   for (const dependency of input.dependencies ?? []) {
     if (!ID.test(dependency.id)) errors.push(`--dependency "${dependency.id}" must be a WinGet package identifier.`);
   }
@@ -104,10 +108,13 @@ export function buildManifests(input: ReleaseInput): ManifestFile[] {
     ? { PackageDependencies: release.dependencies.map((d) => ({ PackageIdentifier: d.id, MinimumVersion: d.minimumVersion })) }
     : undefined;
 
+  const type = installerType(release.url)!;
   const installer = yaml('installer', {
     ...common,
     MinimumOSVersion: release.minimumOSVersion,
-    InstallerType: 'msix',
+    InstallerType: type,
+    // Portable installs get a `cleanup` command alias in WinGet's Links folder.
+    Commands: type === 'portable' ? ['cleanup'] : undefined,
     Scope: 'user',
     UpgradeBehavior: 'install',
     PackageFamilyName: release.packageFamilyName,
@@ -134,6 +141,11 @@ export function buildManifests(input: ReleaseInput): ManifestFile[] {
 export function parseDependency(value: string): Dependency {
   const [id = '', minimumVersion] = value.split('@');
   return minimumVersion ? { id, minimumVersion } : { id };
+}
+
+export function installerType(url: string): 'msix' | 'portable' | null {
+  const path = url.toLowerCase().split('?')[0]!;
+  return path.endsWith('.msix') ? 'msix' : path.endsWith('.exe') ? 'portable' : null;
 }
 
 function isHttps(value: string) {

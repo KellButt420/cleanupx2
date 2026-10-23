@@ -8,7 +8,7 @@ export type SiteConfig = {
   discordUrl: string | null;
   siteUrl: string | null;
   appInstallerUrl: string | null;
-  portableUrl: string | null;
+  setupUrl: string | null;
 };
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -40,7 +40,7 @@ export function readConfig(env: Env, defaults: Partial<Record<keyof SiteConfig, 
     discordUrl: discordInvite(env.VITE_DISCORD_URL ?? defaults.discordUrl),
     siteUrl: httpsUrl(env.VITE_SITE_URL ?? defaults.siteUrl),
     appInstallerUrl: httpsUrl(env.VITE_APP_INSTALLER_URL ?? defaults.appInstallerUrl),
-    portableUrl: httpsUrl(env.VITE_PORTABLE_URL ?? defaults.portableUrl),
+    setupUrl: httpsUrl(env.VITE_SETUP_URL ?? defaults.setupUrl),
   };
 }
 

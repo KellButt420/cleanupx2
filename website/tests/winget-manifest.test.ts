@@ -31,6 +31,13 @@ describe('buildManifests', () => {
     expect(installer).not.toContain('PackageFamilyName');
   });
 
+  test('installer manifest describes the portable EXE with a command alias', () => {
+    const installer = buildManifests({ ...release, url: 'https://example.com/releases/download/v1.0.0/Cleanup.exe' })[2]!.content;
+    expect(installer).toContain('InstallerType: "portable"');
+    expect(installer).toContain('Commands:\n- "cleanup"');
+    expect(installer).not.toContain('Dependencies');
+  });
+
   test('round-trips through a YAML parser', () => {
     for (const file of buildManifests({ ...release, packageFamilyName: 'Cleanup_abc123', description: 'Says "hi": yes' })) {
       const parsed = Bun.YAML.parse(file.content) as Record<string, unknown>;
@@ -40,7 +47,9 @@ describe('buildManifests', () => {
 
   test('refuses incomplete or unsafe releases', () => {
     expect(() => buildManifests({ ...release, url: 'http://example.com/cleanup.msix' })).toThrow('https');
-    expect(validate({ ...release, url: 'https://example.com/cleanup.exe' })).toContain('--url must point to the .msix package.');
+    expect(validate({ ...release, url: 'https://example.com/cleanup.zip' })).toContain('--url must point to the .msix package or portable .exe.');
+    expect(validate({ ...release, url: 'https://example.com/Cleanup.exe', packageFamilyName: 'Cleanup_abc123' }))
+      .toContain('--package-family-name and --dependency apply only to MSIX packages.');
     expect(validate({ ...release, id: 'cleanup', version: 'v1', sha256: 'nope', publisher: ' ' })).toHaveLength(4);
   });
 });

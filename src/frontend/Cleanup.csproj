@@ -28,6 +28,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
+    <!-- Keep local build experiments out of default Content/None globs; a
+         single-file publish would otherwise bundle them into Cleanup.exe. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Desktop distribution bundles both runtimes and needs no MSIX registration. -->

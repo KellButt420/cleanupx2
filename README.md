@@ -24,18 +24,20 @@ Made with WinUI 3 and Rust, with light and dark themes that feel at home on Wind
 
 ## Try the preview
 
-[Download Setup EXE](https://github.com/wiredincorp/cleanup/releases/download/v0.1.1-rc.1/cleanup-0.1.1-windows-x64-setup.exe) · [Portable ZIP](https://github.com/wiredincorp/cleanup/releases/download/v0.1.1-rc.1/cleanup-0.1.1-windows-x64-portable.zip)
+**[Download Cleanup.exe](https://github.com/wiredincorp/cleanup/releases/download/v0.1.2-rc.1/Cleanup.exe)** and open it. That's it: no installer, admin rights, or separate .NET / runtime install. The first launch takes a few seconds longer while it unpacks.
 
-Run the installer, or extract the ZIP and open `Cleanup.exe`. The required runtimes are included—no MSIX setup, certificate import, or separate .NET installation.
+Prefer a Start menu entry and an uninstaller? Use the [setup EXE](https://github.com/wiredincorp/cleanup/releases/download/v0.1.2-rc.1/cleanup-0.1.2-windows-x64-setup.exe) instead.
 
-**Windows 11 x64.** This preview is unsigned, so Windows may show a publisher or SmartScreen warning. ARM64 emulation is unverified; macOS/Linux builds are unavailable. Automatic updates are not enabled yet.
+**If Windows says "Windows protected your PC"**, choose **More info → Run anyway**. The preview isn't code-signed yet, so Windows doesn't recognize the publisher. If Smart App Control or a work/school policy blocks it entirely, it can't be run on that PC until signed builds are available.
+
+**Windows 11 x64.** Settings and history live in `%LOCALAPPDATA%\Cleanup`. To update, use **Settings → Check for updates**, then replace `Cleanup.exe` (or run the newer setup). ARM64 emulation is unverified; macOS/Linux builds are unavailable.
 
 ## Build it
 
 ```powershell
 . .\scripts\env.ps1
 .\scripts\verify-core.ps1
-.\scripts\package-desktop.ps1 -Version 0.1.1
+.\scripts\package-desktop.ps1 -Version 0.1.2
 ```
 
 See the [development guide](docs/development.md) for pinned toolchain versions, installation, and validation.

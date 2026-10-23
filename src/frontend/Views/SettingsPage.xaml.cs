@@ -75,9 +75,8 @@ public sealed partial class SettingsPage : Page
         }
         if (!AppEnvironment.IsPackaged)
         {
-            CheckUpdatesButton.Content = "Check GitHub releases";
-            CheckUpdatesButton.IsEnabled = ReleaseLinks.Releases is not null;
-            UpdateStatus.Text = "Install newer versions from GitHub Releases. Reinstalling preserves your settings and history.";
+            CheckUpdatesButton.IsEnabled = ReleaseLinks.Repository is not null;
+            UpdateStatus.Text = "Checks GitHub for a newer release only when you ask. Updating keeps your settings and history.";
         }
         else if (Windows.ApplicationModel.Package.Current.GetAppInstallerInfo() is null)
         {
@@ -90,10 +89,31 @@ public sealed partial class SettingsPage : Page
     {
         if (!AppEnvironment.IsPackaged)
         {
-            if (ReleaseLinks.Releases is { } releases)
+            if (ReleaseLinks.Repository is not { } repository) return;
+            CheckUpdatesButton.IsEnabled = false;
+            UpdateStatus.Text = "Checking for updates…";
+            try
             {
-                try { await Windows.System.Launcher.LaunchUriAsync(releases); }
-                catch (Exception) { UpdateStatus.Text = "GitHub Releases could not be opened. Visit the project website for downloads."; }
+                Version current = typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0);
+                if (await UpdateCheck.FindNewerAsync(repository, current) is { } release)
+                {
+                    UpdateStatus.Text = $"Version {release.Version.ToString(3)} is available. Close cleanup, then replace Cleanup.exe or run the new setup.";
+                    ReleaseDownloadsLink.NavigateUri = release.Page;
+                    ReleaseDownloadsLink.Content = $"Get {release.Version.ToString(3)}";
+                    ReleaseDownloadsLink.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    UpdateStatus.Text = "You’re up to date.";
+                }
+            }
+            catch (Exception)
+            {
+                UpdateStatus.Text = "Updates couldn’t be checked. Check your connection, or open Latest release.";
+            }
+            finally
+            {
+                CheckUpdatesButton.IsEnabled = true;
             }
             return;
         }

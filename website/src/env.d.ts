@@ -5,5 +5,5 @@ interface ImportMetaEnv {
   readonly VITE_DISCORD_URL?: string;
   readonly VITE_SITE_URL?: string;
   readonly VITE_APP_INSTALLER_URL?: string;
-  readonly VITE_PORTABLE_URL?: string;
+  readonly VITE_SETUP_URL?: string;
 }

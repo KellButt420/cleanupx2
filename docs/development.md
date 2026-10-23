@@ -19,20 +19,26 @@ If NuGet connections from .NET are blocked on the development machine, use
 with PowerShell and restores through a local feed. It is a development fallback,
 not a general NuGet resolver or release build workflow.
 
-## Desktop installer and portable build
+## Desktop portable and installer build
 
-The public preview uses an EXE installer and a portable ZIP:
+The public preview is a portable self-contained `Cleanup.exe`, with a per-user
+setup EXE as fallback:
 
 ```powershell
-.\scripts\package-desktop.ps1 -Version 0.1.1
-.\scripts\verify-desktop-installer.ps1 -Version 0.1.1
+.\scripts\package-desktop.ps1 -Version 0.1.2
+.\scripts\verify-portable.ps1 -Version 0.1.2
+.\scripts\verify-desktop-installer.ps1 -Version 0.1.2
 ```
 
-Outputs are in `artifacts/desktop/0.1.1`. The pinned Inno compiler is downloaded
-and hash-checked automatically. The desktop app includes its runtimes and requires
-no MSIX registration or certificate import. Verification installs into a disposable
-directory and uninstalls afterward; it refuses to run over an existing desktop
-installation. See [launch and updates](launch.md) for limits and release steps.
+Outputs are in `artifacts/desktop/0.1.2`: `Cleanup.exe`, the setup EXE,
+`Cleanup-Notices.zip`, and `SHA256SUMS.txt`. The portable build is a .NET
+single-file bundle and uses `src/frontend/packages.portable.lock.json`, because
+single-file publishing adds the ILLink tasks package to the restore graph.
+The pinned Inno compiler is downloaded and hash-checked automatically. Both
+downloads include their runtimes and require no MSIX registration or certificate
+import. Portable verification extracts into a disposable directory; installer
+verification installs into one and uninstalls afterward, refusing to run over an
+existing desktop installation. See [launch and updates](launch.md) for limits and release steps.
 
 ## Optional MSIX development install
 

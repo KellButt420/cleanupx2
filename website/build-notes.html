@@ -45,7 +45,7 @@
       <h1>Build notes</h1>
       <p>cleanup is a native Windows 11 app built with C#, .NET 10, and WinUI 3, with a Rust library for discovery, uninstall, and file operations. It is a development build, not a production release.</p>
 
-      <div class="docs-notice"><p>The source is on <a href="https://github.com/wiredincorp/cleanup">GitHub</a>. The preview is available as a normal setup EXE and a portable ZIP. Both include .NET, WinUI, and Visual C++ runtimes. Production signing and WinGet publication are still being prepared.</p></div>
+      <div class="docs-notice"><p>The source is on <a href="https://github.com/wiredincorp/cleanup">GitHub</a>. The preview is a single portable Cleanup.exe, with a per-user setup EXE as an alternative. Both include .NET and WinUI; no Visual C++ redistributable is needed. Production signing and WinGet publication are still being prepared.</p></div>
 
       <h2>Release status</h2>
       <ul>
@@ -83,7 +83,7 @@ winget validate --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0
 winget install --manifest winget-output\manifests\p\Publisher\Cleanup\1.0.0</code></pre>
       <p>Validate and test-install locally, then submit the folder as a pull request to <a href="https://github.com/microsoft/winget-pkgs">microsoft/winget-pkgs</a>. Once the package is accepted, set <code>VITE_WINGET_ID</code> and the WinGet tab on the home page shows the install command.</p>
 
-      <h2>Updates and support</h2><p>The desktop preview uses a per-user setup EXE with no MSIX registration or certificate import. A portable ZIP is also available. Install newer versions over the existing desktop installation to keep settings and history. Automatic updates are not enabled. Windows 11 x64 is the verified target; ARM64 through x64 emulation has not been tested, and macOS/Linux builds are unavailable.</p><p>Find downloads on <a href="https://github.com/wiredincorp/cleanup/releases" data-releases>GitHub Releases</a>, or get help in <a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord</a>.</p><h2>What cleanup won’t do</h2>
+      <h2>Updates and support</h2><p>Download Cleanup.exe and open it: no installer, admin rights, MSIX registration, or certificate import. The first launch unpacks its support files into your temp folder, so it opens faster after that. Prefer a Start menu entry and uninstaller? Use the setup EXE instead. Settings and history stay in your user profile either way. To update, replace Cleanup.exe or run a newer setup; Settings → Check for updates tells you when one is out. Because the preview is unsigned, Windows may say “Windows protected your PC”; choose More info, then Run anyway. Windows 11 x64 is the verified target; ARM64 through x64 emulation has not been tested, and macOS/Linux builds are unavailable.</p><p>Find downloads on <a href="https://github.com/wiredincorp/cleanup/releases" data-releases>GitHub Releases</a>, or get help in <a href="https://discord.gg/5kRtCcNWU6" data-discord>Discord</a>.</p><h2>What cleanup won’t do</h2>
       <p>It isn’t a registry cleaner, a PC booster, or a debloater. It doesn’t run in the background. Uninstalls always use the application’s official uninstaller after you confirm the list, and leftovers get their own review with nothing preselected.</p>
     </main>
 

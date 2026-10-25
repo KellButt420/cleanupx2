@@ -91,4 +91,98 @@ Check("install folder size skips shared roots and sums a private folder", () => 
     try { Assert(InstallSize.Measure(root, null, CancellationToken.None) == 8); }
     finally { Directory.Delete(root, recursive: true); }
 });
+Check("folder scan lists biggest folders and keeps the chosen sort while searching", () => {
+    string root = Path.Combine(Path.GetTempPath(), "cleanup-folders-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(root, "big"));
+    Directory.CreateDirectory(Path.Combine(root, "small"));
+    File.WriteAllBytes(Path.Combine(root, "big", "a.bin"), new byte[50]);
+    File.WriteAllBytes(Path.Combine(root, "small", "b.bin"), new byte[10]);
+    File.WriteAllBytes(Path.Combine(root, "big", "needle.txt"), new byte[4]);
+    try
+    {
+        FolderScan.Result scan = FolderScan.Read(root, CancellationToken.None);
+        Assert(scan.Root.Size == 64);
+        Assert(scan.Log.Any(line => line.Contains("files", StringComparison.OrdinalIgnoreCase)));
+        IReadOnlyList<FolderScan.Node> biggest = FolderScan.Rows(scan.Root, null, FolderScan.Column.Size, descending: true);
+        Assert(biggest[0].Name == "big" && biggest[0].Size == 54);
+        Assert(biggest[1].Name == "small" && biggest[1].Size == 10);
+        IReadOnlyList<FolderScan.Node> smallest = FolderScan.Rows(scan.Root, null, FolderScan.Column.Size, descending: false);
+        Assert(smallest[0].Name == "small" && smallest[1].Name == "big");
+        IReadOnlyList<FolderScan.Node> byName = FolderScan.Rows(scan.Root, null, FolderScan.Column.Name, descending: false);
+        Assert(byName[0].Name == "big" && byName[1].Name == "small");
+        IReadOnlyList<FolderScan.Node> found = FolderScan.Rows(scan.Root, "NEEDLE", FolderScan.Column.Name, descending: false);
+        Assert(found.Count == 1 && found[0].Name == "needle.txt" && found[0].Size == 4 && !found[0].IsFolder);
+        Assert(FolderScan.Rows(biggest[0], "b.bin", FolderScan.Column.Size, descending: true).Count == 0);
+        FolderScan.Result missing = FolderScan.Read(Path.Combine(root, "missing"), CancellationToken.None);
+        Assert(missing.Skipped == 1);
+        Assert(missing.Log.Any(line => line.Contains("missing", StringComparison.OrdinalIgnoreCase)));
+    }
+    finally { Directory.Delete(root, recursive: true); }
+});
+Check("a folder shows as soon as it is measured and size sort keeps the largest on top", () => {
+    string root = Path.Combine(Path.GetTempPath(), "cleanup-folders-live-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(root, "big"));
+    Directory.CreateDirectory(Path.Combine(root, "small"));
+    File.WriteAllBytes(Path.Combine(root, "big", "a.bin"), new byte[50]);
+    File.WriteAllBytes(Path.Combine(root, "small", "b.bin"), new byte[10]);
+    var shown = new FolderScan.Node { Name = "device", IsFolder = true };
+    try
+    {
+        int updates = 0;
+        FolderScan.Result scan = FolderScan.ReadStreaming(root, CancellationToken.None, child =>
+        {
+            Assert(child.IsFolder);
+            Assert(child.Name == "big" ? child.Size == 50 : child.Name == "small" && child.Size == 10);
+            shown.Children.Add(child);
+            updates++;
+            IReadOnlyList<FolderScan.Node> rows = FolderScan.Rows(shown, null, FolderScan.Column.Size, descending: true);
+            Assert(rows[0].Size == rows.Max(node => node.Size));
+            if (rows.Count == 2)
+            {
+                Assert(rows[0].Name == "big" && rows[1].Name == "small");
+            }
+        });
+        Assert(updates == 2);
+        Assert(scan.Root.Size == 60);
+    }
+    finally { Directory.Delete(root, recursive: true); }
+});
+Check("each folder is reported when its own size is finished", () => {
+    string root = Path.Combine(Path.GetTempPath(), "cleanup-folders-one-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(root, "big", "nested"));
+    Directory.CreateDirectory(Path.Combine(root, "small"));
+    File.WriteAllBytes(Path.Combine(root, "big", "a.bin"), new byte[50]);
+    File.WriteAllBytes(Path.Combine(root, "big", "nested", "c.bin"), new byte[7]);
+    File.WriteAllBytes(Path.Combine(root, "small", "b.bin"), new byte[10]);
+    var seen = new List<FolderScan.Node>();
+    try
+    {
+        FolderScan.Result scan = FolderScan.Read(root, CancellationToken.None, onFolder: seen.Add);
+        int nested = seen.FindIndex(node => node.Name == "nested");
+        int big = seen.FindIndex(node => node.Name == "big");
+        int small = seen.FindIndex(node => node.Name == "small");
+        Assert(nested >= 0 && big > nested && small >= 0);
+        Assert(seen[nested].Size == 7);
+        Assert(seen[big].Size == 57);
+        Assert(seen[small].Size == 10);
+        Assert(scan.Root.Size == 67);
+    }
+    finally { Directory.Delete(root, recursive: true); }
+});
+Check("folder scan leaves out folders Windows needs to run", () => {
+    Assert(FolderScan.IsProtectedSystem(@"C:\Windows"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\Windows\System32\ntoskrnl.exe"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\System Volume Information\tracking.log"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\$Recycle.Bin\S-1-5-21"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\Recovery"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\pagefile.sys"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\hiberfil.sys"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\swapfile.sys"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\Program Files\WindowsApps\Microsoft.Windows.Shell"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\Program Files\Windows Defender\MsMpEng.exe"));
+    Assert(FolderScan.IsProtectedSystem(@"C:\Program Files (x86)\Windows NT\Accessories"));
+    Assert(!FolderScan.IsProtectedSystem(@"C:\Users\me\Documents"));
+    Assert(!FolderScan.IsProtectedSystem(@"C:\Program Files\Steam"));
+    Assert(!FolderScan.IsProtectedSystem(@"D:\Games\Windows"));
+});
 Console.WriteLine($"{passed} managed regression checks passed.");

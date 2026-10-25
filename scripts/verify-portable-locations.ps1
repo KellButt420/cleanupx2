@@ -58,7 +58,7 @@ function Invoke-PortableSelfTest(
     if (-not (Test-Path $reportPath)) { throw "$name portable app did not write a self-test report (exit $($process.ExitCode))." }
 
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-    if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or -not $report.process.portableSingleFile -or $report.nativeCore.abiVersion -ne 2) {
+    if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or -not $report.process.portableSingleFile -or $report.nativeCore.abiVersion -ne 3) {
         throw "$name portable startup, single-file detection, or native ABI verification failed."
     }
     if ($report.process.startupToWindowLoadedMs -le 0 -or -not $report.inventory.summary -or $report.inventory.summary.sourceErrors.Count) {

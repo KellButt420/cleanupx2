@@ -41,8 +41,10 @@ name = "cleanup-leftovers"
 version = "0.0.1"
 dependencies = [
  "cleanup-core",
+ "cleanup-discovery",
  "cleanup-operations",
  "serde",
+ "serde_json",
  "windows-sys",
 ]
 
@@ -64,6 +66,7 @@ dependencies = [
  "cleanup-discovery",
  "cleanup-operations",
  "serde",
+ "serde_json",
  "windows-sys",
 ]
 

@@ -1,14 +1,36 @@
 param(
     [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $Version = '0.1.2',
-    [string] $CompilerPath
+    [string] $CompilerPath,
+    [string] $ReleaseTag,
+    [ValidatePattern('^[0-9A-Fa-f]{40}$')] [string] $CertificateThumbprint,
+    [string] $SignToolPath,
+    [uri] $TimestampServer = 'https://timestamp.digicert.com'
 )
 $ErrorActionPreference = 'Stop'
+if (-not $ReleaseTag) { $ReleaseTag = "v$Version-preview" }
+if ($ReleaseTag -notmatch "^v$([regex]::Escape($Version))(-[0-9A-Za-z.-]+)?$") { throw 'Release tag must match the desktop version.' }
+if ($ReleaseTag -eq "v$Version" -and -not $CertificateThumbprint) { throw 'Stable desktop releases require a trusted production code-signing certificate.' }
+if ($TimestampServer.Scheme -ne 'https') { throw 'The timestamp server must use HTTPS.' }
 . (Join-Path $PSScriptRoot 'env.ps1')
+if ($CertificateThumbprint) {
+    $certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$CertificateThumbprint"
+    if (-not $certificate.HasPrivateKey -or $certificate.NotBefore -gt (Get-Date) -or $certificate.NotAfter -le (Get-Date) -or $certificate.Subject -eq $certificate.Issuer) { throw 'A valid production certificate with its private key is required.' }
+    if (-not $SignToolPath) { $SignToolPath = (Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin/*/x64/signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1).FullName }
+    if (-not $SignToolPath -or -not (Test-Path -LiteralPath $SignToolPath)) { throw 'Windows SDK signtool.exe is required.' }
+}
+function Sign-DesktopBinary([string] $Path) {
+    if (-not $CertificateThumbprint) { return }
+    & $SignToolPath sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampServer.AbsoluteUri /td SHA256 $Path
+    if ($LASTEXITCODE -ne 0) { throw "Signing failed: $Path" }
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $CertificateThumbprint -or -not $signature.TimeStamperCertificate) { throw "Trusted timestamped signature verification failed: $Path" }
+}
 $output = Join-Path $RepoRoot "artifacts/desktop/$Version"
 $publish = Join-Path $output ('setup-payload-' + [guid]::NewGuid().ToString('N'))
 $portablePublish = Join-Path $output ('portable-publish-' + [guid]::NewGuid().ToString('N'))
 if (-not $CompilerPath) { $CompilerPath = & (Join-Path $PSScriptRoot 'get-inno-setup.ps1') }
 $project = Join-Path $RepoRoot 'src/frontend/Cleanup.csproj'
+$informationalVersion = $ReleaseTag.TrimStart('v')
 
 # Build the Rust core once with the static MSVC CRT. It was the only shipped
 # binary importing VCRUNTIME140.dll; Windows App SDK binaries use the hybrid
@@ -23,6 +45,7 @@ try {
     if ($null -eq $previousRustFlags) { Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue }
     else { $env:RUSTFLAGS = $previousRustFlags }
 }
+Sign-DesktopBinary (Join-Path $RepoRoot 'src/rust/target/release/cleanup_native.dll')
 function Assert-NoVcRuntimeImport([string] $Directory) {
     foreach ($binary in Get-ChildItem $Directory -Recurse -File -Include *.dll, *.exe) {
         $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($binary.FullName))
@@ -36,7 +59,7 @@ function Assert-NoVcRuntimeImport([string] $Directory) {
 dotnet restore $project -r win-x64 -p:Platform=x64 -p:CleanupDesktop=true -p:RestoreLockedMode=true
 if ($LASTEXITCODE -ne 0) { throw 'Locked restore for the Setup fallback failed.' }
 dotnet publish $project -c Release -r win-x64 --self-contained true --no-restore -p:SkipNativeBuild=true `
-    -p:Platform=x64 -p:CleanupDesktop=true -p:RestoreLockedMode=true -p:DebugSymbols=false -p:DebugType=None "-p:Version=$Version" "-p:PublishDir=$publish\"
+    -p:Platform=x64 -p:CleanupDesktop=true -p:RestoreLockedMode=true -p:DebugSymbols=false -p:DebugType=None "-p:Version=$Version" "-p:CleanupReleaseInformationalVersion=$informationalVersion" "-p:PublishDir=$publish\"
 if ($LASTEXITCODE -ne 0) { throw 'Self-contained desktop publish failed.' }
 $runtimeRoot = Join-Path $RepoRoot 'src/frontend/bin/x64/Release/net10.0-windows10.0.26100.0/win-x64'
 Copy-Item -LiteralPath (Join-Path $runtimeRoot 'Cleanup.pri') -Destination $publish
@@ -47,6 +70,7 @@ foreach ($required in @('Cleanup.exe','cleanup_native.dll','Microsoft.UI.Xaml.dl
     if (-not (Test-Path (Join-Path $publish $required))) { throw "Required desktop payload is missing: $required" }
 }
 Assert-NoVcRuntimeImport $publish
+foreach ($binary in @('Cleanup.exe', 'Cleanup.dll', 'cleanup_native.dll')) { Sign-DesktopBinary (Join-Path $publish $binary) }
 # Include the license and notice files from the exact restored runtime packages.
 $assets = Get-Content (Join-Path $RepoRoot 'src/frontend/obj/project.assets.json') -Raw | ConvertFrom-Json
 $cache = $assets.packageFolders.PSObject.Properties.Name | Select-Object -First 1
@@ -76,8 +100,18 @@ foreach ($package in $metadata.packages | Where-Object source) {
         Copy-Item -LiteralPath $notice.FullName -Destination (Join-Path $notices "$($package.name)-$($package.version)-$($notice.Name)")
     }
 }
-& $CompilerPath /Qp "/DAppVersion=$Version" "/DSourceDir=$publish" "/DOutputDir=$output" (Join-Path $RepoRoot 'packaging/cleanup.iss')
+$signArgs = @()
+if ($CertificateThumbprint) {
+    $command = '"' + $SignToolPath + '" sign /sha1 ' + $CertificateThumbprint + ' /fd SHA256 /tr ' + $TimestampServer.AbsoluteUri + ' /td SHA256 $f'
+    $signArgs = @('/DSignDesktop=true', ('/Sproduction=' + $command))
+}
+& $CompilerPath /Qp @signArgs "/DAppVersion=$Version" "/DSourceDir=$publish" "/DOutputDir=$output" (Join-Path $RepoRoot 'packaging/cleanup.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Setup EXE build failed.' }
+if ($CertificateThumbprint) {
+    $setup = Join-Path $output "cleanup-$Version-windows-x64-setup.exe"
+    $signature = Get-AuthenticodeSignature -LiteralPath $setup
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $CertificateThumbprint) { throw 'Setup signature verification failed.' }
+}
 
 # Primary download: a compressed .NET single-file bundle. The .NET runtime host
 # is linked into Cleanup.exe; WinUI/Windows App SDK native files, PRI/XBF
@@ -91,7 +125,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Clean build-state reset before portable publis
 dotnet publish $project -c Release -r win-x64 --self-contained true -p:SkipNativeBuild=true `
     -p:Platform=x64 -p:CleanupDesktop=true -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:EnableMsixTooling=true `
     -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
-    -p:NuGetLockFilePath=packages.portable.lock.json -p:RestoreLockedMode=true -p:DebugSymbols=false -p:DebugType=None "-p:Version=$Version" "-p:PublishDir=$portablePublish\"
+    -p:NuGetLockFilePath=packages.portable.lock.json -p:RestoreLockedMode=true -p:DebugSymbols=false -p:DebugType=None "-p:Version=$Version" "-p:CleanupReleaseInformationalVersion=$informationalVersion" "-p:PublishDir=$portablePublish\"
 if ($LASTEXITCODE -ne 0) { throw 'Self-extracting portable publish failed.' }
 $bundleFiles = @(Get-ChildItem $portablePublish -File)
 if ($bundleFiles.Count -ne 1 -or $bundleFiles[0].Name -ne 'Cleanup.exe') {
@@ -104,9 +138,15 @@ if ($bundleFiles[0].Length -ge $payloadBytes / 2) {
     throw "Portable Cleanup.exe is unexpectedly large ($([math]::Round($bundleFiles[0].Length / 1MB)) MB); check for stray bundled content."
 }
 Copy-Item -LiteralPath $bundleFiles[0].FullName -Destination (Join-Path $output 'Cleanup.exe') -Force
+Sign-DesktopBinary (Join-Path $output 'Cleanup.exe')
 $noticesArchive = Join-Path $output 'Cleanup-Notices.zip'
 Compress-Archive -Path (Join-Path $publish 'Notices/*') -DestinationPath $noticesArchive -CompressionLevel Optimal -Force
-Remove-Item -LiteralPath $publish, $portablePublish -Recurse -Force
+foreach ($temporaryDirectory in @($publish, $portablePublish)) {
+    $resolved = [IO.Path]::GetFullPath($temporaryDirectory)
+    $expectedParent = [IO.Path]::GetFullPath($output).TrimEnd('\') + '\'
+    if (-not $resolved.StartsWith($expectedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Temporary publish folder escaped the expected output directory.' }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
 
 Get-ChildItem $output -File | Where-Object { $_.Name -eq 'Cleanup.exe' -or $_.Name -eq 'Cleanup-Notices.zip' -or $_.Name -like '*-setup.exe' } | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name

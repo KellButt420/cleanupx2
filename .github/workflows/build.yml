@@ -35,8 +35,12 @@ jobs:
         run: ./scripts/verify-core.ps1
       - name: Release tooling guards
         run: ./scripts/verify-release-tooling.ps1
+      - name: Managed regression checks
+        run: ./scripts/verify-managed.ps1
       - name: Build development-signed MSIX
         run: ./scripts/package-dev.ps1
+      - name: Dependency advisories
+        run: ./scripts/verify-dependencies.ps1 -InstallAuditTool
       - name: Checksums
         run: |
           $files = Get-ChildItem artifacts/packages -Recurse -Filter '*.msix' | Where-Object { $_.FullName -notmatch '\\Dependencies\\(arm64|arm|win32|x86)\\' }

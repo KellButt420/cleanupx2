@@ -146,7 +146,9 @@ public sealed partial class MainWindow : Window
         Navigate(typeof(SettingsPage));
     }
 
-    private async void Navigate(Type page)
+    private async void Navigate(Type page) => await NavigateAsync(page);
+
+    private async Task NavigateAsync(Type page)
     {
         bool credits = page == typeof(CreditsPage);
         bool crossingCredits = credits || ContentFrame.CurrentSourcePageType == typeof(CreditsPage);

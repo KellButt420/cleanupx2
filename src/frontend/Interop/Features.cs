@@ -145,7 +145,7 @@ public sealed class HistoryEntry
     public HistoryItem[] Items { get; init; } = [];
 }
 
-internal sealed record JournalRequest(string JournalDirectory);
+internal sealed record JournalRequest(string JournalDirectory, string? Before = null);
 
 internal sealed record RecordUninstallRequest(string JournalDirectory, string AppName, string? Publisher, string Status, string Message);
 
@@ -199,8 +199,8 @@ internal static unsafe class Features
     public static Task<LeftoverRemoveResult> RemoveLeftoversAsync(LeftoverAppInfo app, string[] ids, nint ownerWindow) =>
         CallAsync(new LeftoverRemoveRequest(app, ids, JournalDirectory, ownerWindow), Json.LeftoverRemoveRequest, Json.LeftoverRemoveResult, &NativeMethods.cln_leftovers_remove);
 
-    public static Task<HistoryEntry[]> GetHistoryAsync() =>
-        CallAsync(new JournalRequest(JournalDirectory), Json.JournalRequest, Json.HistoryEntryArray, &NativeMethods.cln_history_list);
+    public static Task<HistoryEntry[]> GetHistoryAsync(string? before = null) =>
+        CallAsync(new JournalRequest(JournalDirectory, before), Json.JournalRequest, Json.HistoryEntryArray, &NativeMethods.cln_history_list);
 
     public static Task RecordUninstallAsync(string appName, string? publisher, string status, string message) =>
         CallAsync(new RecordUninstallRequest(JournalDirectory, appName, publisher, status, message), Json.RecordUninstallRequest, Json.EmptyRequest, &NativeMethods.cln_history_record_uninstall);

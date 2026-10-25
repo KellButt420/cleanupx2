@@ -26,7 +26,11 @@ public sealed partial class HistoryPage : Page
     }
     private void ApplyMode() => AuditExpander.Visibility = SettingsService.Current.AdvancedMode ? Visibility.Visible : Visibility.Collapsed;
     private async void OnRefreshClick(object sender, RoutedEventArgs e) => await RefreshAsync();
-    private async Task RefreshAsync(string? revealBatch = null)
+    private async void OnOlderClick(object sender, RoutedEventArgs e)
+    {
+        if (_entries.Length > 0) await RefreshAsync(before: _entries[^1].Entry.BatchId);
+    }
+    private async Task RefreshAsync(string? revealBatch = null, string? before = null)
     {
         if (_busy) return;
         string? selected = revealBatch ?? (HistoryList.SelectedItem as HistoryItemViewModel)?.Entry.BatchId;
@@ -34,7 +38,7 @@ public sealed partial class HistoryPage : Page
         try
         {
             SetBusy(true);
-            _entries = (await Features.GetHistoryAsync()).Select(entry => new HistoryItemViewModel(entry)).ToArray();
+            _entries = (await Features.GetHistoryAsync(before)).Select(entry => new HistoryItemViewModel(entry)).ToArray();
             ApplyFilter();
             if (reopen && _entries.FirstOrDefault(i => i.Entry.BatchId == selected) is { } item)
             {
@@ -60,7 +64,7 @@ public sealed partial class HistoryPage : Page
         EmptyState.Visibility = visible.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyTitle.Text = _entries.Length == 0 ? "Your changes will appear here" : "No matching changes";
         EmptyDescription.Text = _entries.Length == 0 ? "Remove an app or organize a folder to get started." : "Try another search or filter.";
-        HistoryCount.Text = visible.Length == _entries.Length ? $"{_entries.Length} recorded {(_entries.Length == 1 ? "change" : "changes")}" : $"{visible.Length} of {_entries.Length} changes";
+        HistoryCount.Text = $"{visible.Length} changes on this page. Search and filters apply to this page.";
     }
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -111,6 +115,7 @@ public sealed partial class HistoryPage : Page
         _busy = busy;
         HistoryLoading.IsActive = busy;
         RefreshButton.IsEnabled = HistoryList.IsEnabled = SearchBox.IsEnabled = TypeBox.IsEnabled = StateBox.IsEnabled = !busy;
+        OlderButton.IsEnabled = !busy && _entries.Length == 20;
         UndoButton.IsEnabled = !busy && (HistoryList.SelectedItem as HistoryItemViewModel)?.Entry.CanUndo == true;
     }
     private void Show(InfoBarSeverity severity, string title, string message) { Status.Title = title; Status.Message = message; Status.Severity = severity; Status.IsOpen = true; }

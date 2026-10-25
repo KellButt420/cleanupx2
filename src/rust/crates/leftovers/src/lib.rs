@@ -12,6 +12,7 @@
 //! folders go to the Recycle Bin (Windows asks before deleting permanently);
 //! registry keys are exported to a `.reg` backup before deletion.
 
+mod approvals;
 mod registry;
 
 use std::collections::HashSet;
@@ -100,7 +101,7 @@ const ARCHITECTURE_WORDS: &[&str] = &[
     "x64", "x86", "64bit", "32bit", "amd64", "arm64", "win64", "win32",
 ];
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppInfo {
     pub display_name: String,
@@ -376,6 +377,14 @@ impl Found {
 }
 
 pub fn scan(app: &AppInfo) -> ScanResult {
+    let mut result = scan_paths(app);
+    result
+        .candidates
+        .retain_mut(|candidate| approvals::issue(app, candidate));
+    result
+}
+
+fn scan_paths(app: &AppInfo) -> ScanResult {
     if app.technology == "msix" {
         return ScanResult {
             candidates: Vec::new(),
@@ -654,14 +663,47 @@ pub struct RemoveResult {
 pub fn remove(request: &RemoveRequest) -> Result<RemoveResult> {
     let journal = Journal::open(&request.journal_directory)?;
     // Revalidate: only items that a fresh scan still reports may be removed.
-    let fresh = scan(&request.app);
+    let mut app = request.app.clone();
+    let mut installed = Vec::new();
+    let summary = cleanup_discovery::scan(
+        &cleanup_discovery::ScanOptions {
+            include_msix: false,
+            batch_size: 200,
+        },
+        &mut |batch| installed.extend(batch),
+        &|| false,
+    );
+    if !summary.source_errors.is_empty()
+        || installed
+            .iter()
+            .any(|record| normalize(&record.display_name) == normalize(&app.display_name))
+    {
+        return Err(cleanup_core::CoreError::invalid(
+            "The application may be installed again, or installed applications could not be verified. Scan again before removing leftovers.",
+        ));
+    }
+    app.other_installed_names = installed
+        .iter()
+        .map(|record| record.display_name.clone())
+        .collect();
+    app.other_install_locations = installed
+        .iter()
+        .filter_map(|record| record.install_location.clone())
+        .collect();
+    let fresh = scan_paths(&app);
     let batch_id = new_batch_id();
     let backups = journal.directory().join("backups").join(&batch_id);
     let mut results = Vec::new();
     let mut journal_items = Vec::new();
 
     for id in &request.ids {
-        let Some(candidate) = fresh.candidates.iter().find(|c| &c.id == id) else {
+        let approved = approvals::consume(&request.app, id);
+        let candidate = approved.as_ref().and_then(|approved| {
+            fresh.candidates.iter().find(|candidate| {
+                candidate.id == approved.original_id && approved.unchanged(candidate)
+            })
+        });
+        let Some(candidate) = candidate else {
             results.push(RemoveOutcome {
                 id: id.clone(),
                 path: id
@@ -669,7 +711,9 @@ pub fn remove(request: &RemoveRequest) -> Result<RemoveResult> {
                     .map(|(_, p)| p.to_owned())
                     .unwrap_or_default(),
                 outcome: "rejected".into(),
-                detail: Some("No longer matches the app, so it was left unchanged.".into()),
+                detail: Some(
+                    "The approval expired or the item changed. Scan and review it again.".into(),
+                ),
             });
             continue;
         };
@@ -962,9 +1006,15 @@ mod tests {
         };
         let result = scan(&app);
         let ids: Vec<String> = result.candidates.iter().map(|c| c.id.clone()).collect();
-        assert!(ids.iter().any(|i| i.starts_with("folder:")), "{ids:?}");
         assert!(
-            ids.iter().any(|i| i.starts_with("reg:hkcu:shared:")),
+            result.candidates.iter().any(|c| c.kind == Kind::Folder),
+            "{ids:?}"
+        );
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|c| c.kind == Kind::RegistryKey),
             "{ids:?}"
         );
 

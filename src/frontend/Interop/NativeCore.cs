@@ -35,7 +35,7 @@ internal static unsafe class NativeCore
             return result ?? throw new NativeCoreException("noResult", "The operation produced no result.", NativeStatus.Failed);
         });
     }
-    public const uint ExpectedAbiVersion = 2;
+    public const uint ExpectedAbiVersion = 3;
 
     private const uint PollTimeoutMs = 100;
 

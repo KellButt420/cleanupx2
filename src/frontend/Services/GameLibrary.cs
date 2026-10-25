@@ -18,6 +18,8 @@ internal static class GameLibrary
 {
     private static readonly TimeSpan FolderLimit = TimeSpan.FromSeconds(30);
     private const int MaxFolderDepth = 6;
+    private const int MaxEntries = 20_000;
+    private static readonly SemaphoreSlim ScanGate = new(1);
 
     // Folders that never hold a program or a game file a person would open.
     private static readonly string[] SkippedFolders =
@@ -56,36 +58,51 @@ internal static class GameLibrary
     private static readonly Regex BracketedTags = new(@"\s*[\[\(][^\]\)]*[\]\)]", RegexOptions.Compiled);
 
     /// <summary>Scans on a background thread. Results come back as one list.</summary>
-    public static Task<IReadOnlyList<GameEntry>> ScanAsync(IReadOnlyList<AppRecord> installed, IReadOnlyList<string> folders) =>
-        Task.Run<IReadOnlyList<GameEntry>>(() => ScanAll(installed, folders));
+    public static async Task<IReadOnlyList<GameEntry>> ScanAsync(IReadOnlyList<AppRecord> installed, IReadOnlyList<string> folders)
+    {
+        if (!await ScanGate.WaitAsync(TimeSpan.FromSeconds(1)))
+            throw new IOException("An earlier game scan is still waiting for storage. Try again later.");
+        Task<IReadOnlyList<GameEntry>> task;
+        try
+        {
+            task = Task.Factory.StartNew<IReadOnlyList<GameEntry>>(() => {
+                try
+                {
+                    using var deadline = new CancellationTokenSource(FolderLimit);
+                    return ScanAll(installed, folders.Take(32).ToArray(), deadline.Token);
+                }
+                finally { ScanGate.Release(); }
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+        catch { ScanGate.Release(); throw; }
+        return await task.WaitAsync(FolderLimit);
+    }
 
-    private static List<GameEntry> ScanAll(IReadOnlyList<AppRecord> installed, IReadOnlyList<string> folders)
+    private static List<GameEntry> ScanAll(IReadOnlyList<AppRecord> installed, IReadOnlyList<string> folders, CancellationToken cancellation)
     {
         var games = new List<GameEntry>();
-        games.AddRange(Safely(ScanSteam));
-        games.AddRange(Safely(ScanEpic));
+        games.AddRange(Safely(() => ScanSteam(cancellation)));
+        games.AddRange(Safely(() => ScanEpic(cancellation)));
 
         // A folder on a network share can stall, so each walk gets a time limit.
         var findings = new List<FolderFindings>();
-        foreach (string root in folders.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
+        int remaining = MaxEntries;
+        foreach (string root in folders.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            Task<FolderFindings> walk = Task.Run(() => Walk(root));
-            try
-            {
-                if (walk.Wait(FolderLimit)) findings.Add(walk.Result);
-            }
-            catch (AggregateException)
-            {
-                // A folder that can't be read contributes nothing.
-            }
+            cancellation.ThrowIfCancellationRequested();
+            if (remaining <= 0) break;
+            FolderFindings found = Walk(root, cancellation, remaining);
+            findings.Add(found);
+            remaining -= found.Programs.Count + found.GameFiles.Count;
         }
 
         List<EmulatorInstance> emulators = FindEmulators(installed, findings);
-        games.AddRange(Safely(() => Rpcs3Titles(emulators)));
+        games.AddRange(Safely(() => Rpcs3Titles(emulators, cancellation)));
         games.AddRange(Safely(() => GameFiles(findings, emulators)));
 
         // The same game can be reached twice, such as with two copies of one emulator. The first one found is kept.
-        return games.DistinctBy(game => game.Record.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        cancellation.ThrowIfCancellationRequested();
+        return games.DistinctBy(game => game.Record.Id, StringComparer.OrdinalIgnoreCase).Take(MaxEntries).ToList();
     }
 
     /// <summary>Collects the games from one source. An unreadable library is skipped; the rest still show.</summary>
@@ -93,9 +110,9 @@ internal static class GameLibrary
     {
         try
         {
-            return source().ToList();
+            return source().Take(MaxEntries).ToList();
         }
-        catch (Exception)
+        catch (Exception error) when (error is not OperationCanceledException)
         {
             return [];
         }
@@ -103,7 +120,7 @@ internal static class GameLibrary
 
     // ---- Steam -----------------------------------------------------------
 
-    private static IEnumerable<GameEntry> ScanSteam()
+    private static IEnumerable<GameEntry> ScanSteam(CancellationToken cancellation)
     {
         string? steam = SteamRoot();
         if (steam is null) yield break;
@@ -111,7 +128,7 @@ internal static class GameLibrary
         // Games can live in several libraries, listed in libraryfolders.vdf.
         var libraries = new List<string> { steam };
         string libraryFile = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
-        if (File.Exists(libraryFile) && KeyValues.Parse(File.ReadAllText(libraryFile)).GetValueOrDefault("libraryfolders") is Dictionary<string, object> folders)
+        if (File.Exists(libraryFile) && KeyValues.Parse(BoundedMetadata.ReadText(libraryFile)).GetValueOrDefault("libraryfolders") is Dictionary<string, object> folders)
         {
             foreach (object entry in folders.Values)
             {
@@ -131,6 +148,7 @@ internal static class GameLibrary
             if (!Directory.Exists(steamApps)) continue;
             foreach (string manifest in Directory.EnumerateFiles(steamApps, "appmanifest_*.acf"))
             {
+                cancellation.ThrowIfCancellationRequested();
                 if (ReadSteamManifest(manifest, steamApps) is { } game) yield return game;
             }
         }
@@ -153,7 +171,7 @@ internal static class GameLibrary
     {
         try
         {
-            if (KeyValues.Parse(File.ReadAllText(file)).GetValueOrDefault("AppState") is not Dictionary<string, object> state) return null;
+            if (KeyValues.Parse(BoundedMetadata.ReadText(file)).GetValueOrDefault("AppState") is not Dictionary<string, object> state) return null;
             string appId = Text(state, "appid");
             string name = Text(state, "name");
             if (appId.Length == 0 || name.Length == 0 || IsSteamTool(appId, name)) return null;
@@ -187,12 +205,13 @@ internal static class GameLibrary
 
     // ---- Epic Games Store ------------------------------------------------
 
-    private static IEnumerable<GameEntry> ScanEpic()
+    private static IEnumerable<GameEntry> ScanEpic(CancellationToken cancellation)
     {
         string manifests = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Epic", "EpicGamesLauncher", "Data", "Manifests");
         if (!Directory.Exists(manifests)) yield break;
         foreach (string file in Directory.EnumerateFiles(manifests, "*.item"))
         {
+            cancellation.ThrowIfCancellationRequested();
             if (ReadEpicItem(file) is { } game) yield return game;
         }
     }
@@ -201,7 +220,7 @@ internal static class GameLibrary
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(file));
+            using JsonDocument document = JsonDocument.Parse(BoundedMetadata.ReadText(file));
             JsonElement item = document.RootElement;
             string appName = Json(item, "AppName");
             string name = Json(item, "DisplayName");
@@ -238,19 +257,23 @@ internal static class GameLibrary
     /// Walks each chosen folder for emulator programs and game files. The walk stops at a fixed depth and skips folders
     /// that hold saves, caches, and game data rather than things to open.
     /// </summary>
-    private static FolderFindings Walk(string root)
+    private static FolderFindings Walk(string root, CancellationToken cancellation, int budget)
     {
         var programs = new List<string>();
         var games = new List<string>();
         var pending = new Stack<(string Folder, int Depth)>();
         pending.Push((root, 0));
-        while (pending.Count > 0)
+        int visited = 0;
+        while (pending.Count > 0 && programs.Count + games.Count < budget && visited < 100_000)
         {
+            cancellation.ThrowIfCancellationRequested();
             var (folder, depth) = pending.Pop();
             try
             {
                 foreach (string file in Directory.EnumerateFiles(folder))
                 {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (++visited > 100_000 || programs.Count + games.Count >= budget) break;
                     string extension = Path.GetExtension(file);
                     if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
                     {
@@ -265,6 +288,8 @@ internal static class GameLibrary
                 if (depth >= MaxFolderDepth) continue;
                 foreach (string child in Directory.EnumerateDirectories(folder))
                 {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (++visited > 100_000 || pending.Count >= 20_000) break;
                     bool skipped = SkippedFolders.Contains(Path.GetFileName(child), StringComparer.OrdinalIgnoreCase);
                     bool link = (File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0;
                     if (!skipped && !link) pending.Push((child, depth + 1));
@@ -321,7 +346,7 @@ internal static class GameLibrary
     }
 
     /// <summary>Installed PS3 games: each title folder in RPCS3's own dev_hdd0 that holds a main program.</summary>
-    private static IEnumerable<GameEntry> Rpcs3Titles(IReadOnlyList<EmulatorInstance> emulators)
+    private static IEnumerable<GameEntry> Rpcs3Titles(IReadOnlyList<EmulatorInstance> emulators, CancellationToken cancellation)
     {
         foreach (EmulatorInstance emulator in emulators.Where(instance => instance.Spec.Name == "RPCS3"))
         {
@@ -329,6 +354,7 @@ internal static class GameLibrary
             if (!Directory.Exists(games)) continue;
             foreach (string title in Directory.EnumerateDirectories(games))
             {
+                cancellation.ThrowIfCancellationRequested();
                 if (ReadRpcs3Title(emulator, title) is { } game) yield return game;
             }
         }

@@ -33,7 +33,8 @@ use windows_sys::Win32::System::IO::{
 };
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOBOBJECT_ASSOCIATE_COMPLETION_PORT,
-    JobObjectAssociateCompletionPortInformation, SetInformationJobObject,
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JobObjectAssociateCompletionPortInformation,
+    JobObjectBasicAccountingInformation, QueryInformationJobObject, SetInformationJobObject,
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::SystemServices::{
@@ -350,6 +351,24 @@ impl JobTracker {
             if cancel() {
                 return false;
             }
+            // Completion-port messages are hints, not a guaranteed delivery contract.
+            // Query the job itself so a dropped ACTIVE_PROCESS_ZERO cannot hang the queue.
+            let mut accounting: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { zeroed() };
+            let queried = unsafe {
+                QueryInformationJobObject(
+                    self.job.0,
+                    JobObjectBasicAccountingInformation,
+                    &mut accounting as *mut _ as *mut c_void,
+                    size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                    null_mut(),
+                )
+            };
+            if queried == 0 {
+                return false;
+            } // detach; never terminate an uninstaller on an observation error
+            if accounting.ActiveProcesses == 0 {
+                return true;
+            }
         }
     }
 }
@@ -383,6 +402,13 @@ impl Drop for ComApartment {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_job_finishes_without_any_completion_message() {
+        let tracker = JobTracker::new().unwrap();
+        let start = Instant::now();
+        assert!(tracker.wait_for_tree(&|| start.elapsed().as_secs() >= 1, &mut 0));
+    }
 
     #[test]
     fn waits_for_the_whole_process_tree() {

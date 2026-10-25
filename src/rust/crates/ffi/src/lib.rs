@@ -1,6 +1,6 @@
 //! C ABI for the Cleanup native core.
 //!
-//! # Contract (ABI version 2)
+//! # Contract (ABI version 3)
 //!
 //! * All requests and responses are UTF-8 JSON.
 //! * Input buffers are owned by the caller and only borrowed for the
@@ -27,7 +27,7 @@ use serde::Serialize;
 pub use operation::Operation;
 use operation::{Next, Sink};
 
-pub const CLN_ABI_VERSION: u32 = 2;
+pub const CLN_ABI_VERSION: u32 = 3;
 
 macro_rules! cancellable_export {
     ($name:ident, $request:ty, $worker:expr) => {
@@ -72,7 +72,7 @@ pub const CLN_E_INVALID_ARGUMENT: i32 = -1;
 pub const CLN_E_FAILED: i32 = -2;
 pub const CLN_E_PANIC: i32 = -3;
 
-const MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
+const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 
 /// Byte buffer allocated by the core. Release with [`cln_buffer_free`].
 #[repr(C)]
@@ -195,6 +195,8 @@ macro_rules! json_export {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct JournalRequest {
     journal_directory: String,
+    #[serde(default)]
+    before: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -242,7 +244,7 @@ json_export!(
     /// History entries, newest first, including interrupted batches.
     cln_history_list, JournalRequest, |r| {
         let journal = cleanup_operations::Journal::open(&r.journal_directory)?;
-        to_json(&cleanup_operations::summaries(&journal.read()?))
+        to_json(&journal.recent(r.before.as_deref())?)
     }
 );
 json_export!(
@@ -564,6 +566,17 @@ mod tests {
         assert!(
             json.contains("\"code\":\"internal\"") && json.contains("boom"),
             "{json}"
+        );
+    }
+
+    #[test]
+    fn requests_larger_than_old_limit_are_accepted_but_still_bounded() {
+        let mut bytes = b"{}".to_vec();
+        bytes.resize(5 * 1024 * 1024, b' ');
+        assert!(unsafe { parse_request::<serde_json::Value>(bytes.as_ptr(), bytes.len()) }.is_ok());
+        assert!(
+            unsafe { parse_request::<serde_json::Value>(bytes.as_ptr(), MAX_REQUEST_BYTES + 1) }
+                .is_err()
         );
     }
 

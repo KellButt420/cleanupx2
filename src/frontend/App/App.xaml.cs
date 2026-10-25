@@ -81,8 +81,10 @@ public partial class App : Application
     private void LaunchWindow()
     {
         var options = SelfTestOptions.Parse(Environment.GetCommandLineArgs());
-        _selfTest = options.Enabled;
-        if (options.Enabled && options.LocalAppDataRoot is { } localAppDataRoot)
+        _selfTest = options.Enabled || options.UiSmoke;
+        if (options.UiSmoke && (options.Enabled || options.LocalAppDataRoot is null || options.ReportPath is null || options.FixtureDirectory is null))
+            throw new ArgumentException("--ui-smoke requires --local-app-data-root, --report, and --fixture-dir, and cannot be combined with --selftest.");
+        if ((options.Enabled || options.UiSmoke) && options.LocalAppDataRoot is { } localAppDataRoot)
         {
             AppEnvironment.ConfigureLocalAppDataRootForSelfTest(localAppDataRoot);
         }
@@ -99,6 +101,7 @@ public partial class App : Application
         }
         // The feasibility window is only used by the automated test harness.
         MainWindow = options.Enabled ? new FeasibilityWindow(options) : new MainWindow();
+        if (options.UiSmoke && MainWindow is MainWindow normal) normal.ConfigureReleaseSmoke(options);
         MainWindow.Activate();
         if (!options.Enabled) PublishWindowHandle(WinRT.Interop.WindowNative.GetWindowHandle(MainWindow));
     }

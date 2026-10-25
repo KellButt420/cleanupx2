@@ -113,6 +113,7 @@ impl Key {
         let mut name = vec![0u16; 16_384];
         let mut data = vec![0u8; 64 * 1024];
         let mut index = 0u32;
+        let mut total_bytes = 0usize;
         loop {
             let mut name_len = name.len() as u32;
             let mut data_len = data.len() as u32;
@@ -132,6 +133,10 @@ impl Key {
             };
             match rc {
                 ERROR_SUCCESS => {
+                    total_bytes += data_len as usize + name_len as usize * 2;
+                    if total_bytes > 2 * 1024 * 1024 || values.len() >= 10_000 {
+                        return None;
+                    }
                     values.push((
                         String::from_utf16_lossy(&name[..name_len as usize]),
                         kind,
@@ -178,7 +183,7 @@ pub fn export(hive: Hive, view: RegView, subkey: &str) -> Option<String> {
 }
 
 fn export_key(key: &Key, path: &str, view: RegView, out: &mut String, depth: u32) -> Option<()> {
-    if depth > 32 {
+    if depth > 32 || out.len() > 8 * 1024 * 1024 {
         return None;
     }
     out.push_str(&format!("[{path}]\r\n"));

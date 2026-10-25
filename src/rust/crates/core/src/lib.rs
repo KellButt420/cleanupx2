@@ -5,6 +5,7 @@
 //! manager.
 
 pub mod error;
+pub mod files;
 pub mod guid;
 pub mod model;
 pub mod paths;

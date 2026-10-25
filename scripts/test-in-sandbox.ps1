@@ -34,7 +34,7 @@ function Invoke-SelfTest([string] $exe, [string] $name) {
         windowLoadedMs = $json.process.startupToWindowLoadedMs; nativeAbi = $json.nativeCore.abiVersion
         fileMoves = [bool]($json.fileMoves.moved -and $json.fileMoves.movedBack -and $json.fileMoves.existingFileUnchanged)
         errors = @($json.errors) + @($json.fatal | Where-Object { $_ })
-        passed = [bool]($json -and -not $json.fatal -and -not $json.errors.Count -and $json.nativeCore.abiVersion -eq 2 -and $json.fileMoves.moved -and $json.fileMoves.movedBack)
+        passed = [bool]($json -and -not $json.fatal -and -not $json.errors.Count -and $json.nativeCore.abiVersion -eq 3 -and $json.fileMoves.moved -and $json.fileMoves.movedBack)
     }
 }
 $portable = Join-Path $env:USERPROFILE 'Downloads\Cleanup.exe'

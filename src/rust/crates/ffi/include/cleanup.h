@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-/* ABI 2. Length-delimited UTF-8 JSON. Returned buffers are Rust-owned;
+/* ABI 3. Length-delimited UTF-8 JSON. Returned buffers are Rust-owned;
    release each exactly once with cln_buffer_free. Inputs are borrowed.
    Handles must stay live throughout polling/cancellation; do not free
    concurrently. See docs/ffi-contract.md for message and error semantics. */

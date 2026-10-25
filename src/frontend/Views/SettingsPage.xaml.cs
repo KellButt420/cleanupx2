@@ -40,8 +40,8 @@ public sealed partial class SettingsPage : Page
         TintPresetBox.ItemsSource = TintPresets.Select(p => p.Name).ToArray();
         LoadTintControls();
 
-        var desktopVersion = typeof(App).Assembly.GetName().Version;
-        VersionText.Text = desktopVersion is null ? "Desktop preview" : $"Version {desktopVersion.Major}.{desktopVersion.Minor}.{desktopVersion.Build}";
+        var desktopVersion = ReleaseVersion.FromAssembly(typeof(App).Assembly);
+        VersionText.Text = $"Version {desktopVersion}";
         BuildChannelText.Text = "Desktop preview";
         if (AppEnvironment.IsPackaged)
         {
@@ -94,12 +94,12 @@ public sealed partial class SettingsPage : Page
             UpdateStatus.Text = "Checking for updates…";
             try
             {
-                Version current = typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0);
+                ReleaseVersion current = ReleaseVersion.FromAssembly(typeof(App).Assembly);
                 if (await UpdateCheck.FindNewerAsync(repository, current) is { } release)
                 {
-                    UpdateStatus.Text = $"Version {release.Version.ToString(3)} is available. Close cleanup, then replace Cleanup.exe or run the new setup.";
+                    UpdateStatus.Text = $"Version {release.Version} is available. Close cleanup, then replace Cleanup.exe or run the new setup.";
                     ReleaseDownloadsLink.NavigateUri = release.Page;
-                    ReleaseDownloadsLink.Content = $"Get {release.Version.ToString(3)}";
+                    ReleaseDownloadsLink.Content = $"Get {release.Version}";
                     ReleaseDownloadsLink.Visibility = Visibility.Visible;
                 }
                 else

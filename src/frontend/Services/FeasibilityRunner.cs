@@ -116,6 +116,7 @@ internal sealed class FeasibilityRunner(SelfTestOptions options, nint ownerWindo
 
         if (options.FixtureDirectory is { } fixtureDirectory)
         {
+            await Section(report, errors, "organizer", async () => await OrganizerSmoke.RunAsync(fixtureDirectory));
             await Section(report, errors, "fileMoves", () => Task.Run(() =>
             {
                 Directory.CreateDirectory(fixtureDirectory);

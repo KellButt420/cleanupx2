@@ -9,6 +9,10 @@
 #endif
 
 [Setup]
+#ifdef SignDesktop
+SignTool=production
+SignedUninstaller=yes
+#endif
 AppId={{DB9EB688-8CC9-4CA8-908E-5658412F8E25}
 AppName=cleanup
 AppVersion={#AppVersion}

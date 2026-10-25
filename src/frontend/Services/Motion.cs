@@ -27,7 +27,8 @@ internal static class Motion
 
     private static readonly UISettings Ui = new();
     private static readonly List<(WeakReference<UIElement> Element, float Rise)> Registrations = [];
-    private static readonly ConditionalWeakTable<object, DispatcherQueueTimer> Tweens = new();
+    private sealed record TweenRegistration(DispatcherQueueTimer Timer, Action Unsubscribe);
+    private static readonly ConditionalWeakTable<object, TweenRegistration> Tweens = new();
 
     static Motion()
     {
@@ -166,27 +167,28 @@ internal static class Motion
         DispatcherQueueTimer timer = queue.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(16);
         timer.IsRepeating = true;
-        timer.Tick += (_, _) =>
+        void Tick(DispatcherQueueTimer sender, object args)
         {
             double elapsed = clock.Elapsed.TotalMilliseconds - delay.TotalMilliseconds;
             double progress = Math.Clamp(elapsed / duration.TotalMilliseconds, 0, 1);
             apply(1 - Math.Pow(1 - progress, 3)); // Ease out: quick start, gentle landing.
             if (progress >= 1)
             {
-                timer.Stop();
-                Tweens.Remove(owner);
+                Stop(owner);
             }
-        };
-        Tweens.AddOrUpdate(owner, timer);
+        }
+        timer.Tick += Tick;
+        Tweens.AddOrUpdate(owner, new(timer, () => timer.Tick -= Tick));
         timer.Start();
     }
 
     /// <summary>Ends a tween started for <paramref name="owner"/>, leaving the value where it is.</summary>
     public static void Stop(object owner)
     {
-        if (Tweens.TryGetValue(owner, out DispatcherQueueTimer? timer))
+        if (Tweens.TryGetValue(owner, out TweenRegistration? registration))
         {
-            timer.Stop();
+            registration.Timer.Stop();
+            registration.Unsubscribe();
             Tweens.Remove(owner);
         }
     }

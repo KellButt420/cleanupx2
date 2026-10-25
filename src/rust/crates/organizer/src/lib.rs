@@ -15,12 +15,12 @@ pub mod category;
 use std::collections::HashSet;
 use std::fs::{self, Metadata};
 use std::os::windows::fs::MetadataExt;
-use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
+use cleanup_core::files::LockedFile;
 use cleanup_core::paths::{
     DirectoryGuard, KnownFolder, describe_file_error, is_drive_root, is_plain_absolute, is_within,
-    known_folder, move_no_replace, same_path,
+    known_folder, same_path,
 };
 use cleanup_core::time::civil_from_days;
 use cleanup_core::{CoreError, ErrorCode, Result};
@@ -127,7 +127,7 @@ pub struct Plan {
     pub renamed_count: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApplyOperation {
     pub id: u32,
@@ -522,6 +522,31 @@ pub fn plan_with_cancel(request: &PlanRequest, cancel: &dyn Fn() -> bool) -> Res
         });
     }
     let renamed_count = operations.iter().filter(|o| o.renamed).count();
+    // Leave room for the request envelope and the managed JSON encoder's
+    // Unicode/HTML escaping. Ordinary ASCII paths retain the 20,000-file limit.
+    let mut request_bytes = 128 * 1024;
+    for operation in &operations {
+        let apply = ApplyOperation {
+            id: operation.id,
+            source: operation.source.clone(),
+            destination: operation.destination.clone(),
+            identity: operation.identity,
+        };
+        request_bytes += serde_json::to_vec(&apply)
+            .map_err(|e| CoreError::invalid(e.to_string()))?
+            .len();
+        request_bytes += [&apply.source, &apply.destination]
+            .iter()
+            .flat_map(|text| text.bytes())
+            .filter(|byte| !byte.is_ascii_alphanumeric() && !b"_-. :/\\".contains(byte))
+            .count()
+            * 5;
+    }
+    if request_bytes > 16 * 1024 * 1024 {
+        return Err(CoreError::rejected(
+            "The preview is too large to apply safely. Choose a smaller folder or filter by file type.",
+        ));
+    }
     Ok(Plan {
         source: source.to_string_lossy().into_owned(),
         destination: root.to_string_lossy().into_owned(),
@@ -620,7 +645,7 @@ pub fn apply_with_cancel(request: &ApplyRequest, cancel: &dyn Fn() -> bool) -> R
 
     let mut moved = 0;
     let mut failures = Vec::new();
-    for op in &planned {
+    for (op, approved) in planned.iter().zip(&request.operations) {
         if cancel() {
             break;
         }
@@ -629,22 +654,12 @@ pub fn apply_with_cancel(request: &ApplyRequest, cancel: &dyn Fn() -> bool) -> R
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let outcome = (|| -> std::result::Result<PathBuf, String> {
-            // Deny concurrent writes while validating and moving this file.
-            let _file_guard = fs::OpenOptions::new()
-                .read(true)
-                .share_mode(1 | 4)
-                .open(&from)
-                .map_err(|error| describe_file_error(error.raw_os_error().unwrap_or(5) as u32))?;
-            let approved = request
-                .operations
-                .iter()
-                .find(|approved| approved.id == op.op_id)
-                .ok_or("Missing approval.")?;
-            if approved.identity.is_none() || FileIdentity::of(&from) != approved.identity {
+        let outcome = (|| -> std::result::Result<(PathBuf, FileIdentity), String> {
+            let file = LockedFile::open(&from).map_err(|error| error.message)?;
+            if approved.identity.is_none() || file.identity().ok() != approved.identity {
                 return Err("The file changed since the preview. Preview again.".into());
             }
-            let metadata = fs::symlink_metadata(&from).map_err(|_| describe_file_error(2))?;
+            let metadata = file.metadata().map_err(|_| describe_file_error(2))?;
             let extension = from
                 .extension()
                 .map(|e| e.to_string_lossy().to_lowercase())
@@ -659,18 +674,25 @@ pub fn apply_with_cancel(request: &ApplyRequest, cancel: &dyn Fn() -> bool) -> R
             let _created_guard = DirectoryGuard::parents(&wanted)?;
             // Keep the exact approved destination; a new collision fails.
             let destination = wanted;
-            move_no_replace(&from, &destination).map_err(describe_file_error)?;
-            Ok(destination)
+            let identity = file
+                .move_to(&destination, |identity| {
+                    journal.append(&Event::MovePrepared {
+                        batch_id: batch_id.clone(),
+                        op_id: op.op_id,
+                        identity,
+                    })
+                })
+                .map_err(|error| error.message)?;
+            Ok((destination, identity))
         })();
         let (outcome, destination, detail, identity) = match outcome {
-            Ok(destination) => {
+            Ok((destination, identity)) => {
                 moved += 1;
-                let identity = FileIdentity::of(&destination);
                 (
                     MoveOutcome::Moved,
                     destination.to_string_lossy().into_owned(),
                     None,
-                    identity,
+                    Some(identity),
                 )
             }
             Err(reason) => {
@@ -712,7 +734,7 @@ pub fn undo(request: &UndoRequest) -> Result<UndoResult> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let journal = Journal::open(&request.journal_directory)?;
-    let events = journal.read()?;
+    let events = journal.read_batch(&request.batch_id)?;
     let batch = organize_batch(&events, &request.batch_id).ok_or_else(|| {
         CoreError::new(
             ErrorCode::NotFound,
@@ -731,10 +753,7 @@ pub fn undo(request: &UndoRequest) -> Result<UndoResult> {
             .unwrap_or_default();
         let original_guard = DirectoryGuard::parents(&original);
         let current_guard = DirectoryGuard::parents(&current);
-        let file_guard = fs::OpenOptions::new()
-            .read(true)
-            .share_mode(1 | 4)
-            .open(&current);
+        let file_guard = LockedFile::open(&current);
         let result: std::result::Result<(), String> =
             if original_guard.is_err() || current_guard.is_err() {
                 Err("A parent folder was replaced by a link or cannot be inspected.".into())
@@ -742,16 +761,29 @@ pub fn undo(request: &UndoRequest) -> Result<UndoResult> {
                 Err("The file is in use or cannot be opened safely.".into())
             } else if !is_plain_absolute(&original) || !is_plain_absolute(&current) {
                 Err("The history entry is not valid.".into())
-            } else if FileIdentity::of(&current).is_none() {
-                Err("The organized file is no longer where cleanup put it.".into())
-            } else if FileIdentity::of(&current) != state.identity {
+            } else if file_guard
+                .as_ref()
+                .ok()
+                .and_then(|file| file.identity().ok())
+                != state.identity
+            {
                 Err("The file was changed after it was organized.".into())
             } else if fs::symlink_metadata(&original).is_ok() {
                 Err("Another file now uses the original name.".into())
             } else if !original.parent().is_some_and(Path::is_dir) {
                 Err("The original folder no longer exists.".into())
             } else {
-                move_no_replace(&current, &original).map_err(describe_file_error)
+                file_guard
+                    .unwrap()
+                    .move_to(&original, |identity| {
+                        journal.append(&Event::UndoPrepared {
+                            batch_id: request.batch_id.clone(),
+                            op_id: state.op_id,
+                            identity,
+                        })
+                    })
+                    .map(|_| ())
+                    .map_err(|error| error.message)
             };
         let (outcome, detail) = match result {
             Ok(()) => {
@@ -859,6 +891,57 @@ mod tests {
     }
 
     #[test]
+    fn interrupted_move_and_undo_are_reconciled_by_prepared_identity() {
+        let f = Fixture::new("recovery");
+        f.file("a.png", "original");
+        let plan = f.plan(GroupBy::Type, DateFolders::None);
+        let operation = &plan.operations[0];
+        fs::create_dir_all(Path::new(&operation.destination).parent().unwrap()).unwrap();
+        let journal = Journal::open(f.journal.to_str().unwrap()).unwrap();
+        let id = new_batch_id();
+        journal
+            .append(&Event::BatchStarted {
+                batch_id: id.clone(),
+                kind: BatchKind::Organize,
+                title: "interrupted fixture".into(),
+                at_unix_ms: 1,
+                operations: vec![PlannedMove {
+                    op_id: operation.id,
+                    source: operation.source.clone(),
+                    destination: operation.destination.clone(),
+                }],
+            })
+            .unwrap();
+        LockedFile::open(Path::new(&operation.source))
+            .unwrap()
+            .move_to(Path::new(&operation.destination), |identity| {
+                journal.append(&Event::MovePrepared {
+                    batch_id: id.clone(),
+                    op_id: operation.id,
+                    identity,
+                })
+            })
+            .unwrap();
+        let batch = organize_batch(&journal.read_batch(&id).unwrap(), &id).unwrap();
+        assert!(batch.moves[0].moved);
+        LockedFile::open(Path::new(&operation.destination))
+            .unwrap()
+            .move_to(Path::new(&operation.source), |identity| {
+                journal.append(&Event::UndoPrepared {
+                    batch_id: id.clone(),
+                    op_id: operation.id,
+                    identity,
+                })
+            })
+            .unwrap();
+        let batch = organize_batch(&journal.read_batch(&id).unwrap(), &id).unwrap();
+        // Recovery must remember the completed forward move even after a crash
+        // during undo, when the destination has already disappeared.
+        assert!(batch.moves[0].undone);
+        assert_eq!(fs::read_to_string(&operation.source).unwrap(), "original");
+    }
+
+    #[test]
     fn simple_mode_sorts_into_doc_media_binary_and_others() {
         let f = Fixture::new("simple");
         f.file("a.pdf", "1");
@@ -911,7 +994,8 @@ mod tests {
         let plan = f.plan(GroupBy::Type, DateFolders::None);
         assert!(plan.operations[0].destination.ends_with("a (2).png"));
         assert!(plan.operations[0].renamed);
-        f.apply(&plan);
+        let applied = f.apply(&plan);
+        assert_eq!(applied.moved, 1, "{applied:?}");
         assert_eq!(
             fs::read_to_string(f.inbox.join("Images").join("a.png")).unwrap(),
             "existing"

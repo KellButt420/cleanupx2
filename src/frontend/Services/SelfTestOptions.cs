@@ -10,7 +10,8 @@ internal sealed record SelfTestOptions(
     string? FixtureDirectory,
     string? LocalAppDataRoot,
     bool UninstallFixtures,
-    bool AllowElevation)
+    bool AllowElevation,
+    bool UiSmoke = false)
 {
     public static SelfTestOptions Parse(IReadOnlyList<string> args)
     {
@@ -34,6 +35,7 @@ internal sealed record SelfTestOptions(
             FixtureDirectory: Value("--fixture-dir"),
             LocalAppDataRoot: Value("--local-app-data-root"),
             UninstallFixtures: Flag("--uninstall-fixtures"),
-            AllowElevation: Flag("--allow-elevation"));
+            AllowElevation: Flag("--allow-elevation"),
+            UiSmoke: Flag("--ui-smoke"));
     }
 }

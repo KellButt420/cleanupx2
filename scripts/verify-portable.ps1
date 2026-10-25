@@ -38,7 +38,7 @@ if (-not $process.WaitForExit(60000)) {
 }
 if (-not (Test-Path $reportPath)) { throw "Portable app did not write its self-test report (exit $($process.ExitCode))." }
 $report = Get-Content $reportPath -Raw | ConvertFrom-Json
-if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or $report.nativeCore.abiVersion -ne 2) {
+if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or $report.nativeCore.abiVersion -ne 3) {
     throw 'Portable startup, unpackaged state, or native ABI verification failed.'
 }
 if ($report.process.startupToWindowLoadedMs -le 0 -or -not $report.inventory.summary -or $report.inventory.summary.sourceErrors.Count) {

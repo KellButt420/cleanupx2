@@ -8,16 +8,20 @@ namespace Cleanup.Services;
 /// </summary>
 internal static class KeyValues
 {
+    private const int MaxDepth = 64;
+    private const int MaxCharacters = 1024 * 1024;
     public static Dictionary<string, object> Parse(string text)
     {
+        if (text.Length > MaxCharacters) throw new FormatException("Steam metadata is too large.");
         int position = 0;
-        return ParseObject(text, ref position);
+        return ParseObject(text, ref position, 0);
     }
 
     private enum Kind { Text, Open, Close, End }
 
-    private static Dictionary<string, object> ParseObject(string text, ref int position)
+    private static Dictionary<string, object> ParseObject(string text, ref int position, int depth)
     {
+        if (depth >= MaxDepth) throw new FormatException("Steam metadata is nested too deeply.");
         var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         while (true)
         {
@@ -27,7 +31,7 @@ internal static class KeyValues
 
             var (valueKind, value) = Next(text, ref position);
             if (valueKind == Kind.Text) result[key] = value;
-            else if (valueKind == Kind.Open) result[key] = ParseObject(text, ref position);
+            else if (valueKind == Kind.Open) result[key] = ParseObject(text, ref position, depth + 1);
             else return result;
         }
     }
@@ -74,6 +78,7 @@ internal static class KeyValues
                 }
                 position++;
             }
+            if (position >= text.Length) throw new FormatException("Unterminated Steam metadata string.");
             position++; // The closing quote.
             return (Kind.Text, builder.ToString());
         }

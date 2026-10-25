@@ -11,21 +11,29 @@ internal static partial class StorageService
     // take several seconds to spin up after a disc is inserted, so it gets a longer limit.
     private static readonly TimeSpan NetworkProbeTimeout = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan LocalProbeTimeout = TimeSpan.FromSeconds(15);
+    private static readonly SingleFlight<string, DriveItemViewModel> Probes = new(32);
+    private static readonly SingleFlight<string, DriveInfo[]> DriveLists = new(1);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DriveType> Types = new();
 
     public static async Task<DriveItemViewModel[]> ReadAsync()
     {
         // The type is a quick lookup, so it is read here with the drive list and kept even if probing times out.
-        var drives = await Task.Run(() => DriveInfo.GetDrives().Select(drive => (Drive: drive, Type: drive.DriveType)).ToArray());
-        return await Task.WhenAll(drives.Select(entry => ProbeAsync(entry.Drive, entry.Type)));
+        DriveInfo[] drives = await DriveLists.Run("drives", DriveInfo.GetDrives).WaitAsync(LocalProbeTimeout);
+        return await Task.WhenAll(drives.Select(ProbeAsync));
     }
 
-    private static async Task<DriveItemViewModel> ProbeAsync(DriveInfo drive, DriveType type)
+    private static async Task<DriveItemViewModel> ProbeAsync(DriveInfo drive)
     {
         string letter = drive.Name.TrimEnd('\\');
+        DriveType type = Types.GetValueOrDefault(letter, DriveType.Unknown);
         TimeSpan timeout = type == DriveType.Network ? NetworkProbeTimeout : LocalProbeTimeout;
         try
         {
-            return await Task.Run(() => Probe(drive, type)).WaitAsync(timeout);
+            return await Probes.Run(letter, () => {
+                DriveType actual = drive.DriveType;
+                Types[letter] = actual;
+                return Probe(drive, actual);
+            }).WaitAsync(timeout);
         }
         catch (TimeoutException)
         {

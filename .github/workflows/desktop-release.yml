@@ -48,12 +48,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed.' }
       - name: Verify native core
         run: ./scripts/verify-core.ps1
+      - name: Verify managed regressions
+        run: ./scripts/verify-managed.ps1
       - name: Build portable EXE and setup
-        run: ./scripts/package-desktop.ps1 -Version $env:RELEASE_VERSION
+        run: ./scripts/package-desktop.ps1 -Version $env:RELEASE_VERSION -ReleaseTag $env:RELEASE_TAG
+      - name: Dependency advisories
+        run: ./scripts/verify-dependencies.ps1 -InstallAuditTool
       - name: Verify per-user setup install and uninstall
         run: ./scripts/verify-desktop-installer.ps1 -Version $env:RELEASE_VERSION
       - name: Verify portable first launch
         run: ./scripts/verify-portable.ps1 -Version $env:RELEASE_VERSION -AllowElevated
+      - name: Verify normal application window
+        run: ./scripts/verify-ui-smoke.ps1 -ExecutablePath "artifacts/desktop/$env:RELEASE_VERSION/Cleanup.exe"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |

@@ -14,7 +14,10 @@
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <Grid>
    <StackPanel Spacing="4"><TextBlock Text="History" Style="{StaticResource TitleTextBlockStyle}"/><TextBlock x:Name="HistoryCount" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
-   <Button x:Name="RefreshButton" Content="Refresh" HorizontalAlignment="Right" VerticalAlignment="Top" Click="OnRefreshClick"/>
+   <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Top">
+    <Button x:Name="OlderButton" Content="Older changes" Click="OnOlderClick" IsEnabled="False"/>
+    <Button x:Name="RefreshButton" Content="Latest changes" Click="OnRefreshClick"/>
+   </StackPanel>
   </Grid>
   <Grid Grid.Row="1" ColumnSpacing="8">
    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="150"/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions>

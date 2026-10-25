@@ -1,11 +1,11 @@
-# Native boundary (ABI 2, x64)
+# Native boundary (ABI 3, x64)
 
 The native library is `cleanup_native.dll`; C declarations are in
 `src/rust/crates/ffi/include/cleanup.h`. C# uses source-generated `LibraryImport`
 with Cdecl and a `SafeHandle` for each operation. DLL search is restricted to the
 application assembly directory and System32.
 
-- Check `cln_abi_version() == 2` before other calls.
+- Check `cln_abi_version() == 3` before other calls.
 - Requests and responses are length-delimited UTF-8 JSON, without a terminating NUL.
 - Input memory is borrowed during the call; Rust copies/parses it before returning.
 - A returned buffer contains a pointer and `size_t` byte count, not a Rust collection.
@@ -16,7 +16,7 @@ application assembly directory and System32.
   never race with either. C# disposes the cancellation registration before the handle.
 - The caller must provide valid pointers and lengths. The boundary handles null,
   malformed, and oversized requests, but cannot make arbitrary invalid pointers safe.
-- Requests are bounded to 4 MiB. Start requests reject unknown JSON fields.
+- Requests are bounded to 16 MiB. Start requests reject unknown JSON fields.
 - Exports and workers catch Rust panics. Process aborts and allocator exhaustion are
   outside the recoverable error contract.
 
@@ -51,7 +51,27 @@ cannot always be interrupted immediately.
 Each approved file move carries the identity captured during preview (volume, file
 index, size, and last-write ticks). The core denies concurrent writes while checking
 and moving the file, holds directory ancestors against replacement, and never changes
-the approved destination after confirmation. New conflicts require another preview.
+the approved destination after confirmation. Renaming and cross-volume source deletion
+operate on that same owned handle. Cross-volume copies preserve data streams and file
+dates; unsupported stream types and encrypted files are preserved for manual handling.
+Prepared destination identities are flushed before committing moves and undo, allowing
+interrupted operations to be reconciled only when the expected identity still matches.
+New conflicts require another preview.
+
+Leftover candidate IDs are opaque, one-use approvals that expire after 15 minutes.
+Approvals bind the reviewed app context and the complete inspected tree or registry
+snapshot. Changed/replaced targets require another review. Removal refreshes installed
+apps and refuses to proceed when inventory sources fail or the app appears installed.
+Approval snapshots have entry, time and aggregate memory limits; oversized or
+uninspectable candidates are omitted. The Shell still owns Recycle Bin operations;
+these are not atomic transactions with registry deletion or other applications.
+
+`cln_history_list` accepts `{"journalDirectory":"...","before":null}` and returns at
+most 20 entries. Pass the last entry's `batchId` as `before` for older entries. New
+events use `batches/<batchId>.jsonl`; legacy `history.jsonl` is streamed unchanged.
+Undo reads only the selected batch. Events, batches and history responses have byte
+limits; malformed/torn events are skipped, while oversized input fails explicitly.
+The UI keeps one page and applies search/filters to that page.
 
 The synchronous persistence and probe-move exports remain Phase 0 diagnostics. They operate
 on fixture files and a diagnostic launch log, not user organization rules or a durable

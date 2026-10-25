@@ -13,14 +13,13 @@
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::os::windows::fs::MetadataExt;
-use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use cleanup_core::time::unix_millis_now;
 use cleanup_core::{CoreError, ErrorCode, Result};
 use serde::{Deserialize, Serialize};
+mod history;
 
 const JOURNAL_FILE: &str = "history.jsonl";
 const MAX_ITEMS_IN_SUMMARY: usize = 500;
@@ -47,47 +46,7 @@ pub enum UndoOutcome {
     Conflict,
 }
 
-/// Size and last-write time, which a copy-based cross-volume move preserves.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileIdentity {
-    pub size_bytes: u64,
-    pub modified_ticks: u64,
-    #[serde(default)]
-    pub volume: Option<u32>,
-    #[serde(default)]
-    pub file_index: Option<u64>,
-}
-
-impl FileIdentity {
-    pub fn of(path: &Path) -> Option<Self> {
-        let link_metadata = fs::symlink_metadata(path).ok()?;
-        if link_metadata.file_attributes() & 0x400 != 0 {
-            return None;
-        }
-        let file = File::open(path).ok()?;
-        let metadata = file.metadata().ok()?;
-        let mut info: windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION =
-            unsafe { std::mem::zeroed() };
-        if unsafe {
-            windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle(
-                file.as_raw_handle(),
-                &mut info,
-            )
-        } == 0
-        {
-            return None;
-        }
-        metadata.is_file().then(|| FileIdentity {
-            size_bytes: metadata.len(),
-            modified_ticks: metadata.last_write_time(),
-            volume: Some(info.dwVolumeSerialNumber),
-            file_index: Some(
-                (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
-            ),
-        })
-    }
-}
+pub use cleanup_core::files::FileIdentity;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,6 +84,16 @@ pub enum Event {
     DirectoryCreated {
         batch_id: String,
         path: String,
+    },
+    MovePrepared {
+        batch_id: String,
+        op_id: u32,
+        identity: FileIdentity,
+    },
+    UndoPrepared {
+        batch_id: String,
+        op_id: u32,
+        identity: FileIdentity,
     },
     MoveCompleted {
         batch_id: String,
@@ -165,6 +134,8 @@ impl Event {
         match self {
             Event::BatchStarted { batch_id, .. }
             | Event::DirectoryCreated { batch_id, .. }
+            | Event::MovePrepared { batch_id, .. }
+            | Event::UndoPrepared { batch_id, .. }
             | Event::MoveCompleted { batch_id, .. }
             | Event::BatchFinished { batch_id, .. }
             | Event::MoveUndone { batch_id, .. }
@@ -205,12 +176,17 @@ impl Journal {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut line = serde_json::to_vec(event)
             .map_err(|e| CoreError::new(ErrorCode::Internal, e.to_string()))?;
+        if line.len() >= 16 * 1024 * 1024 {
+            return Err(CoreError::invalid(
+                "The operation is too large to record safely.",
+            ));
+        }
         line.push(b'\n');
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
-            .open(&self.path)
+            .open(self.batch_path(event.batch_id())?)
             .map_err(|e| io_error("Opening history", &e))?;
         // Separate a torn tail from the next complete event after a restart.
         if file
@@ -237,16 +213,7 @@ impl Journal {
     /// Reads every intact event. A torn or unknown line (for example after a
     /// crash mid-write) is skipped rather than failing the whole history.
     pub fn read(&self) -> Result<Vec<Event>> {
-        let file = match File::open(&self.path) {
-            Ok(file) => file,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(io_error("Reading history", &e)),
-        };
-        Ok(BufReader::new(file)
-            .lines()
-            .map_while(|line| line.ok())
-            .filter_map(|line| serde_json::from_str(&line).ok())
-            .collect())
+        self.read_selected(None)
     }
 }
 
@@ -305,6 +272,8 @@ pub struct MoveState {
     pub moved: bool,
     pub identity: Option<FileIdentity>,
     pub undone: bool,
+    pub prepared_identity: Option<FileIdentity>,
+    pub undo_identity: Option<FileIdentity>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -322,6 +291,7 @@ fn organize_batch_events<'a>(
     batch_id: &str,
 ) -> Option<OrganizeBatch> {
     let mut batch: Option<OrganizeBatch> = None;
+    let mut indices = HashMap::new();
     for event in events.filter(|e| e.batch_id() == batch_id) {
         match event {
             Event::BatchStarted {
@@ -329,6 +299,11 @@ fn organize_batch_events<'a>(
                 operations,
                 ..
             } => {
+                indices = operations
+                    .iter()
+                    .enumerate()
+                    .map(|(i, op)| (op.op_id, i))
+                    .collect();
                 batch = Some(OrganizeBatch {
                     moves: operations
                         .iter()
@@ -356,11 +331,38 @@ fn organize_batch_events<'a>(
             } => {
                 if let Some(state) = batch
                     .as_mut()
-                    .and_then(|b| b.moves.iter_mut().find(|m| m.op_id == *op_id))
+                    .and_then(|b| indices.get(op_id).and_then(|i| b.moves.get_mut(*i)))
                 {
                     state.moved = *outcome == MoveOutcome::Moved;
                     state.destination = destination.clone();
                     state.identity = *identity;
+                    state.prepared_identity = None;
+                }
+            }
+            Event::MovePrepared {
+                op_id, identity, ..
+            } => {
+                if let Some(state) = batch
+                    .as_mut()
+                    .and_then(|b| indices.get(op_id).and_then(|i| b.moves.get_mut(*i)))
+                {
+                    state.prepared_identity = Some(*identity);
+                }
+            }
+            Event::UndoPrepared {
+                op_id, identity, ..
+            } => {
+                if let Some(state) = batch
+                    .as_mut()
+                    .and_then(|b| indices.get(op_id).and_then(|i| b.moves.get_mut(*i)))
+                {
+                    // A recovered forward move can be undone without ever
+                    // having emitted MoveCompleted before the original crash.
+                    if let Some(prepared) = state.prepared_identity {
+                        state.moved = true;
+                        state.identity = Some(prepared);
+                    }
+                    state.undo_identity = Some(*identity);
                 }
             }
             Event::MoveUndone {
@@ -370,15 +372,42 @@ fn organize_batch_events<'a>(
             } => {
                 if let Some(state) = batch
                     .as_mut()
-                    .and_then(|b| b.moves.iter_mut().find(|m| m.op_id == *op_id))
+                    .and_then(|b| indices.get(op_id).and_then(|i| b.moves.get_mut(*i)))
                 {
                     state.undone = true;
+                    state.undo_identity = None;
                 }
             }
             _ => {}
         }
     }
+    if let Some(batch) = batch.as_mut() {
+        for state in &mut batch.moves {
+            if !state.moved
+                && state.prepared_identity.is_some_and(|id| {
+                    missing(Path::new(&state.source))
+                        && FileIdentity::of(Path::new(&state.destination)) == Some(id)
+                })
+            {
+                state.moved = true;
+                state.identity = state.prepared_identity;
+            }
+            if state.moved
+                && !state.undone
+                && state.undo_identity.is_some_and(|id| {
+                    missing(Path::new(&state.destination))
+                        && FileIdentity::of(Path::new(&state.source)) == Some(id)
+                })
+            {
+                state.undone = true;
+            }
+        }
+    }
     batch
+}
+
+fn missing(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
 }
 
 /// Folds the event log into one summary per batch, newest first.
@@ -638,6 +667,7 @@ mod tests {
         journal.append(&moved("b1", 1)).unwrap();
         // Simulate a crash in the middle of writing the next line.
         OpenOptions::new()
+            .create(true)
             .append(true)
             .open(dir.join(JOURNAL_FILE))
             .unwrap()

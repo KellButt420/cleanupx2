@@ -11,11 +11,11 @@ $installed = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPP
 if (-not $installed.WaitForExit(60000) -or $installed.ExitCode -ne 0) { throw 'Desktop installation failed.' }
 if (-not (Test-Path (Join-Path $installDirectory 'Cleanup.exe')) -or -not (Test-Path $registration)) { throw 'Installation did not create the app and per-user registration.' }
 $reportPath = Join-Path $testRoot 'launch.json'
-$process = Start-Process -FilePath (Join-Path $installDirectory 'Cleanup.exe') -ArgumentList @('--selftest','--report',('"' + $reportPath + '"'),'--fixture-dir',('"' + (Join-Path $testRoot 'moves') + '"')) -WindowStyle Hidden -PassThru
+$process = Start-Process -FilePath (Join-Path $installDirectory 'Cleanup.exe') -ArgumentList @('--selftest','--report',('"' + $reportPath + '"'),'--fixture-dir',('"' + (Join-Path $testRoot 'moves') + '"'),'--local-app-data-root',('"' + (Join-Path $testRoot 'profile') + '"')) -WindowStyle Hidden -PassThru
 if (-not $process.WaitForExit(45000)) { throw 'Installed app startup test timed out.' }
 if (-not (Test-Path $reportPath)) { throw "Installed app did not write its test report (exit $($process.ExitCode))." }
 $report = Get-Content $reportPath -Raw | ConvertFrom-Json
-if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or $report.nativeCore.abiVersion -ne 2) { throw 'Installed app failed unpackaged WinUI/native-core verification. Inspect the private report in artifacts/installer-qa.' }
+if ($report.fatal -or $report.errors.Count -or $report.process.packaged -ne $false -or $report.nativeCore.abiVersion -ne 3) { throw 'Installed app failed unpackaged WinUI/native-core verification. Inspect the private report in artifacts/installer-qa.' }
 $dataDirectory = $report.process.localStateDirectory
 if (-not $dataDirectory) { $dataDirectory = Join-Path $env:LOCALAPPDATA 'Cleanup' }
 $marker = Join-Path $dataDirectory ('installer-preservation-' + [guid]::NewGuid().ToString('N') + '.txt')

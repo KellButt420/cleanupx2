@@ -297,7 +297,11 @@ public sealed partial class OrganizePage : Page
     {
         if (_busy) return;
         if (_lastFolder is { } folder && Directory.Exists(folder))
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+        {
+            var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")) { UseShellExecute = true };
+            start.ArgumentList.Add(Path.TrimEndingDirectorySeparator(folder));
+            Process.Start(start)?.Dispose();
+        }
     }
 
     // ---- Options ---------------------------------------------------------------

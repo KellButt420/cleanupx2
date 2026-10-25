@@ -5,13 +5,15 @@ function Assert-Refused([scriptblock]$Action, [string]$Expected) {
     try { & $Action | Out-Null; throw 'Operation should have been refused.' }
     catch { if ($_.Exception.Message -notlike "*$Expected*") { throw } }
 }
-foreach ($script in @('package-release.ps1', 'new-appinstaller.ps1')) {
+foreach ($script in @('package-release.ps1', 'new-appinstaller.ps1', 'package-desktop.ps1', 'verify-ui-smoke.ps1', 'verify-dependencies.ps1', 'verify-managed.ps1')) {
     $tokens = $null
     $errors = $null
     [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $script), [ref]$tokens, [ref]$errors)
     if ($errors.Count) { throw "PowerShell parse failure: $script" }
 }
 Assert-Refused { & "$PSScriptRoot/package-release.ps1" -Version 0.1.0.0 -IdentityName Cleanup.Dev -Publisher 'CN=Cleanup Dev' -Unsigned } 'separate production identity'
+Assert-Refused { & "$PSScriptRoot/package-desktop.ps1" -Version 0.1.0 -ReleaseTag v0.1.0 } 'trusted production code-signing certificate'
+Assert-Refused { & "$PSScriptRoot/package-desktop.ps1" -Version 0.1.0 -ReleaseTag v0.2.0-rc.1 } 'tag must match'
 Assert-Refused { & "$PSScriptRoot/package-release.ps1" -Version 0.1.0.0 -IdentityName WiredIn.Cleanup -Publisher 'CN=wiredincorp' } 'trusted production code-signing certificate'
 Assert-Refused { & "$PSScriptRoot/new-appinstaller.ps1" -Package 'missing.msix' -ReleaseBaseUrl 'http://example.com' -FeedUrl 'https://example.com/cleanup.appinstaller' } 'HTTPS'
 $candidate = Join-Path $root 'artifacts/release/0.1.0.0/cleanup-0.1.0.0-x64-unsigned.msix'

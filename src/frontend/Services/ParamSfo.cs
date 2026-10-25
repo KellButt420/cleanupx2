@@ -9,7 +9,7 @@ internal static class ParamSfo
     {
         try
         {
-            byte[] data = File.ReadAllBytes(path);
+            byte[] data = BoundedMetadata.ReadBytes(path, 256 * 1024);
             if (data.Length < 20 || data[0] != 0 || data[1] != (byte)'P' || data[2] != (byte)'S' || data[3] != (byte)'F')
             {
                 return null;

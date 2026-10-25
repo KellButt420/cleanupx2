@@ -66,7 +66,9 @@ public sealed partial class ApplicationsViewModel : ObservableObject
     public string SizeSortHeader => SortIndex == 6 && _recentBySize
         ? $"Size {(SortDescending ? "↓" : "↑")}"
         : SortHeader(2, "Size");
-    public string InstalledSortHeader => SortIndex == 6 ? "Last run" : SortHeader(3, "Installed");
+    public string InstalledSortHeader => SortIndex == 6 && !_recentBySize
+        ? $"Last run {(SortDescending ? "↓" : "↑")}"
+        : SortIndex == 6 ? "Last run" : SortHeader(3, "Installed");
     public string DriveSortHeader => SortHeader(5, "Drive");
 
     private string SortHeader(int column, string label) => SortIndex == column ? $"{label} {(SortDescending ? "↓" : "↑")}" : label;
@@ -79,6 +81,28 @@ public sealed partial class ApplicationsViewModel : ObservableObject
             if (!_recentBySize)
             {
                 _recentBySize = true;
+                if (!SortDescending)
+                {
+                    SortDescending = true;
+                }
+                else
+                {
+                    ApplyView();
+                }
+            }
+            else
+            {
+                SortDescending = !SortDescending;
+            }
+            NotifySortHeaders();
+            return;
+        }
+        // Last run flips newest and oldest without leaving Recently running.
+        if (SortIndex == 6 && column == 3)
+        {
+            if (_recentBySize)
+            {
+                _recentBySize = false;
                 if (!SortDescending)
                 {
                     SortDescending = true;
@@ -216,7 +240,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject
         {
             _recentBySize = false;
         }
-        bool descending = value is 2 or 3;
+        bool descending = value is 2 or 3 or 6;
         if (value == 6)
         {
             _ = LoadActivityAsync(++_activityScan);
@@ -692,7 +716,9 @@ public sealed partial class ApplicationsViewModel : ObservableObject
                 ? SortDescending
                     ? view.OrderBy(i => i.ShownBytes is null).ThenByDescending(i => i.ShownBytes ?? 0)
                     : view.OrderBy(i => i.ShownBytes is null).ThenBy(i => i.ShownBytes ?? 0)
-                : view.OrderBy(i => i.RunRank).ThenByDescending(i => i.LastRan ?? DateTime.MinValue).ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase),
+                : SortDescending
+                    ? view.OrderBy(i => !i.IsRunningNow && i.LastRan is null).ThenByDescending(i => i.IsRunningNow ? DateTime.MaxValue : i.LastRan ?? DateTime.MinValue)
+                    : view.OrderBy(i => !i.IsRunningNow && i.LastRan is null).ThenBy(i => i.IsRunningNow ? DateTime.MaxValue : i.LastRan ?? DateTime.MinValue),
             _ => Order(i => i.Name, StringComparer.CurrentCultureIgnoreCase),
         };
         view = sorted.ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase);

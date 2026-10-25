@@ -333,13 +333,15 @@ fn io_error(context: &str, error: std::io::Error) -> CoreError {
 mod tests {
     use super::*;
     fn fixture() -> std::path::PathBuf {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::path::absolute(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../target/handle-tests")
                 .join(format!(
-                    "cleanup-handle-test-{}-{}",
+                    "cleanup-handle-test-{}-{}-{}",
                     std::process::id(),
-                    crate::time::unix_millis_now()
+                    crate::time::unix_millis_now(),
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 )),
         )
         .unwrap();

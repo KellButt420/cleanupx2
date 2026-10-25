@@ -40,4 +40,55 @@ Check("metadata read limits apply before allocation", () => {
     try { using (var stream = File.Create(file)) stream.SetLength(1024 * 1024 + 1); Expect<IOException>(() => BoundedMetadata.ReadBytes(file)); }
     finally { File.Delete(file); }
 });
+Check("execution history decodes a program path and its last run", () => {
+    Assert(RecentActivity.Rot13(@"P:\Ncc\ncc.rkr") == @"C:\App\app.exe");
+    var data = new byte[72];
+    DateTime ran = new(2026, 10, 20, 15, 4, 0, DateTimeKind.Local);
+    BitConverter.GetBytes(ran.ToFileTime()).CopyTo(data, 60);
+    Assert(RecentActivity.LastExecuted(data) == ran);
+    Assert(RecentActivity.LastExecuted(new byte[16]) is null);
+    string? system = RecentActivity.ToExecutablePath(@"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\notepad.exe");
+    Assert(system is not null && system.EndsWith(@"\notepad.exe", StringComparison.OrdinalIgnoreCase));
+    Assert(RecentActivity.ToExecutablePath("UEME_CTLSESSION") is null);
+});
+Check("running and recent programs match their own folder only", () => {
+    string programs = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+    string mine = Path.Combine(programs, "Mine");
+    string mineExe = Path.Combine(mine, "mine.exe");
+    var last = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase) { [mineExe] = DateTime.Now.AddHours(-3) };
+    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    RecentActivity.RunHit broad = RecentActivity.Match([Path.Combine(programs, "Other", "other.exe")], last, names, programs, mineExe);
+    Assert(!broad.Running && broad.LastRan == last[mineExe]);
+    Assert(RecentActivity.Match([Path.Combine(programs, "Other", "other.exe")], last, names, programs, null).LastRan is null);
+    RecentActivity.RunHit hit = RecentActivity.Match([mineExe], last, names, mine, Path.Combine(programs, "Emulator", "emu.exe"));
+    Assert(hit.Running && hit.LastRan == last[mineExe]);
+    Assert(RecentActivity.Caption(true, null, DateTime.Now) == "Running");
+    Assert(RecentActivity.Caption(false, DateTime.Now.AddMinutes(-5), DateTime.Now) == "Ran 5 min ago");
+    Assert(RecentActivity.Caption(false, DateTime.Now.AddDays(-40), DateTime.Now) is null);
+    var named = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase) { ["Brave"] = DateTime.Now.AddDays(-2), [@"E:\Other\mine.exe"] = DateTime.Now.AddDays(-1) };
+    Assert(RecentActivity.Match([], named, new HashSet<string>(), null, @"D:\Apps\brave.exe", null, "Brave Browser").LastRan == named["Brave"]);
+    Assert(RecentActivity.Match([], named, new HashSet<string>(), null, @"D:\Mine\mine.exe").LastRan == named[@"E:\Other\mine.exe"]);
+    Assert(RecentActivity.Match([], new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase) { [@"E:\Other\setup.exe"] = DateTime.Now }, new HashSet<string>(), null, @"D:\Mine\setup.exe").LastRan is null);
+    var blob = new byte[16];
+    BitConverter.GetBytes(new DateTime(2026, 10, 20, 8, 0, 0, DateTimeKind.Local).ToFileTime()).CopyTo(blob, 0);
+    Assert(RecentActivity.ExecutionTime(blob)?.Date == new DateTime(2026, 10, 20));
+    Assert(RecentActivity.ToDosPath(@"\Device\HarddiskVolume4\Apps\app.exe", new Dictionary<string, string> { [@"\Device\HarddiskVolume4"] = @"C:\" }) == @"C:\Apps\app.exe");
+    var used = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase)
+    {
+        [@"C:\Program Files\7-Zip\7zFM.exe"] = DateTime.Now.AddDays(-1),
+        [@"C:\Program Files (x86)\Steam\Steam.exe"] = DateTime.Now.AddDays(-2),
+    };
+    Assert(RecentActivity.Match([], used, new HashSet<string>(), @"C:\Program Files\7-Zip\", @"C:\Program Files\7-Zip\7zFM.exe", null, "7-Zip 26.04 (x64)").LastRan == used[@"C:\Program Files\7-Zip\7zFM.exe"]);
+    Assert(RecentActivity.Match([], used, new HashSet<string>(), null, @"C:\Program Files (x86)\Steam\uninstall.exe", null, "Steam").LastRan == used[@"C:\Program Files (x86)\Steam\Steam.exe"]);
+    Assert(RecentActivity.PackageMatches(@"C:\Program Files\WindowsApps\Microsoft.GamingApp_2610.1001.20.0_x64__8wekyb3d8bbwe\XboxPcApp.exe", "Microsoft.GamingApp_8wekyb3d8bbwe"));
+});
+Check("install folder size skips shared roots and sums a private folder", () => {
+    Assert(InstallSize.Measure(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), null, CancellationToken.None) is null);
+    string root = Path.Combine(Path.GetTempPath(), "cleanup-size-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(Path.Combine(root, "nested"));
+    File.WriteAllBytes(Path.Combine(root, "a.bin"), new byte[3]);
+    File.WriteAllBytes(Path.Combine(root, "nested", "b.bin"), new byte[5]);
+    try { Assert(InstallSize.Measure(root, null, CancellationToken.None) == 8); }
+    finally { Directory.Delete(root, recursive: true); }
+});
 Console.WriteLine($"{passed} managed regression checks passed.");

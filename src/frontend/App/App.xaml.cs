@@ -50,6 +50,11 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (RecentActivity.ExportBackgroundLog(Environment.GetCommandLineArgs()))
+        {
+            Exit();
+            return;
+        }
         try { LaunchWindow(); }
         catch (Exception error)
         {

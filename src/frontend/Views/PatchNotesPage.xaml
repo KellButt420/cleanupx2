@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Cleanup.Views.PatchNotesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Page.Resources>
+        <Style x:Key="SectionStyle" BasedOn="{StaticResource BodyStrongTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,20,0,6" />
+        </Style>
+        <Style x:Key="NoteStyle" BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <StackPanel Padding="24,16,24,24" Spacing="0" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Patch notes" />
+            <TextBlock Margin="0,4,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Changes in this copy of cleanup, on top of 0.1.6." TextWrapping="Wrap" />
+
+            <TextBlock Style="{StaticResource SectionStyle}" Text="Added" />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Recently running sort. The same apps stay in the list. Programs that are open say Running. The others show the date they last ran." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="While that sort is selected, the date column is labeled Last run. Other sorts still show the install date." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Last run comes from Windows history, the administrator activity log, Store app last-use data such as Xbox, and Steam’s Last played time. Epic games match when that game’s program was started." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Windows asks once to read the administrator log. The result is kept for 12 hours." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Size for programs whose installer never recorded one. Cleanup adds up that app’s own folder. The total at the top includes those sizes." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Press Size while Recently running is selected to sort that same list largest first, then smallest. Last run stays visible. Apps with no size stay at the bottom." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Press Last run to flip between newest and oldest without leaving Recently running." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="More installed programs are listed, including system-component installs such as NVIDIA pieces and Visual C++ runtimes, and installs with no uninstall command. Remove stays off when there is no uninstaller." />
+
+            <TextBlock Style="{StaticResource SectionStyle}" Text="Fixed" />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Install folders saved with a trailing slash now match the program inside them." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Apps whose registered program is uninstall.exe, such as Steam and MSI Afterburner, match the program you actually open." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Store apps match when Windows puts a version number in the folder name. That was why Xbox looked like it had never been run." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="A program is also matched when its file or folder name is the app’s name, including Brave and Edge." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Shortcut targets are followed, so a last-run record that points at a shortcut still counts." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Setup programs, uninstallers, and other generic helper names do not stamp the wrong last-run date." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Folder sizes do not follow links or junctions, and they do not total shared locations such as Program Files, Downloads, or your profile." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="A folder that takes too long still keeps the size counted so far." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Emulator games are not given the emulator’s last-run time." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Windows updates, patches, Microsoft system pieces with no uninstaller, Microsoft system pieces in the Windows folder, Edge WebView2, the application compatibility database, the servicing stack, and built-in Windows packages stay off the list. Visual C++, the .NET runtimes, and the Windows SDK stay." />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

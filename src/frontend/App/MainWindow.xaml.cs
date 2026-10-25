@@ -146,6 +146,13 @@ public sealed partial class MainWindow : Window
         Navigate(typeof(SettingsPage));
     }
 
+    private void OnPatchNotesClick(object sender, RoutedEventArgs e)
+    {
+        Nav.SelectedIndex = -1;
+        SettingsNav.SelectedIndex = -1;
+        Navigate(typeof(PatchNotesPage));
+    }
+
     private async void Navigate(Type page) => await NavigateAsync(page);
 
     private async Task NavigateAsync(Type page)

@@ -64,15 +64,22 @@ Collection is confined to this explicit diagnostic mode; ordinary application be
   back on denied HKCU/Start-menu writes; the external PowerShell host stalled during initialization,
   so the same fixture checks were executed directly with .NET instead.
 
-One earlier native run had an intermittent collision-fixture failure; its diagnostic assertion was
-improved, the isolated retry passed, and the complete final suite passed. Concurrently locked
-files remain a reported per-file failure rather than being forced through a move.
+Publication CI reproduced the earlier collision test failure and identified a Windows rename
+request that omitted the filename terminator. The variable buffer now includes that terminator
+while its filename-length field still excludes it. The complete native CI checks passed after
+the correction. CI also caught parallel file tests sharing a millisecond-based fixture name;
+an atomic counter now keeps their directories distinct. Concurrently locked files remain a
+reported per-file failure rather than being forced through a move.
 
 ## Remaining release gates and limits
 
-The local environment could not download cargo-audit from crates.io. A NuGet query returned no
-listed vulnerabilities, but later restores reported NU1900; a current dependency advisory verdict
-is therefore **incomplete**. Run the new failing CI advisory gate with network access.
+The local environment could not download cargo-audit from crates.io, and later NuGet restores
+reported NU1900. Publication subsequently completed the current Rust and NuGet advisory gates
+successfully in GitHub Actions, together with all native/managed checks, packaging,
+per-user install/uninstall, portable startup, normal-window smoke and build provenance.
+The published preview is [v0.1.6-rc.1](https://github.com/wiredincorp/cleanup/releases/tag/v0.1.6-rc.1),
+built from `ae319fe04d028adb5010654fd5b1e0ab94c7548b` by
+[release run 40152191647](https://github.com/wiredincorp/cleanup/actions/runs/40152191647).
 
 A trusted production certificate and timestamped signing verification are still required for a
 stable public release. The signing path was inspected and its refusal checks exercised; no

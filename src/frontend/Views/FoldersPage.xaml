@@ -36,6 +36,7 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Spacing="8">
                 <Button Content="Open" Click="OnOpenClick" AutomationProperties.Name="Open in Explorer" />
                 <Button Content="Scan log" Click="OnLogClick" AutomationProperties.Name="Scan log" />
+                <Button x:Name="BackgroundScanButton" Content="Scan in background" Click="OnBackgroundClick" AutomationProperties.Name="Scan in background" ToolTipService.ToolTip="Press again to turn it off" />
                 <Button Content="Rescan" Click="OnRescanClick" AutomationProperties.Name="Rescan folders" />
             </StackPanel>
         </Grid>

@@ -59,7 +59,7 @@
             <TextBlock Style="{StaticResource NoteStyle}" Text="Search finds folders and files by name." />
             <TextBlock Style="{StaticResource NoteStyle}" Text="Name, Path, and Size each sort both ways and stay on the folder and search you are using." />
             <TextBlock Style="{StaticResource NoteStyle}" Text="Back is beside the title. The mouse back button goes back too." />
-            <TextBlock Style="{StaticResource NoteStyle}" Text="While the scan runs, the page says this may take a minute." />
+            <TextBlock Style="{StaticResource NoteStyle}" Text="Scan in background keeps the scan going while any other page is open. Press it again to turn that off. The scan keeps running, and pressing it again turns background mode back on without starting over." />
             <TextBlock Style="{StaticResource NoteStyle}" Text="Windows, Recovery, Boot, EFI, System Volume Information, the recycle bin, WindowsApps, Windows Defender, Windows NT, and the page, hibernation, and swap files are left out." />
             <TextBlock Style="{StaticResource NoteStyle}" Text="Scan log shows drives, skipped paths, and counted sizes. The same text is saved as folder-scan.log." />
             <TextBlock Style="{StaticResource NoteStyle}" Text="Open opens the selected folder in Explorer. Rescan starts the scan over." />

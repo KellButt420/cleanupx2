@@ -10,21 +10,26 @@ namespace Cleanup.Views;
 
 public sealed partial class FoldersPage : Page
 {
-    private readonly object _gate = new();
+    private static readonly object _gate = new();
     private readonly Dictionary<string, FolderScan.Node> _shown = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<FolderScan.Node> _loaded = new();
-    private readonly Queue<FolderScan.Node> _ready = new();
+    private static readonly List<FolderScan.Node> _loaded = new();
+    private static readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Queue<FolderScan.Node> _ready = new();
     private readonly ObservableCollection<FolderRowViewModel> _rows = new();
-    private readonly List<string> _log = new();
+    private static readonly List<string> _log = new();
     private readonly List<FolderScan.Node> _trail = new();
-    private CancellationTokenSource? _scan;
-    private FolderScan.Node? _root;
+    private static CancellationTokenSource? _scan;
+    private static FolderScan.Node? _root;
+    private static FoldersPage? _page;
+    private static bool _scanning;
+    private static bool _background;
+    private static bool _stoppedByToggle;
     private FolderScan.Column _column = FolderScan.Column.Size;
     private bool _descending = true;
     private bool _followSort;
-    private bool _started;
-    private int _generation;
-    private long _lastProgressTick;
+    private static bool _started;
+    private static int _generation;
+    private static long _lastProgressTick;
 
     public FoldersPage()
     {
@@ -32,19 +37,61 @@ public sealed partial class FoldersPage : Page
         FolderList.ItemsSource = _rows;
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
         Loaded += OnLoaded;
+        _page = this;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        _page = this;
+        if (_scanning || _loaded.Count > 0)
+        {
+            ShowRows();
+            Progress.IsIndeterminate = _scanning;
+            ScanNote.Visibility = _scanning ? Visibility.Visible : Visibility.Collapsed;
+            if (_scanning && _background)
+            {
+                ScanNote.Text = "Scanning in the background. This may take a minute. Other pages stay usable.";
+            }
+            ShowBackgroundButton();
+            return;
+        }
         if (_started)
         {
             return;
         }
         _started = true;
-        await StartScanAsync();
+        await StartScanAsync(reset: true);
     }
 
-    private async void OnRescanClick(object sender, RoutedEventArgs e) => await StartScanAsync();
+    private async void OnRescanClick(object sender, RoutedEventArgs e) => await StartScanAsync(reset: true);
+
+    private void OnBackgroundClick(object sender, RoutedEventArgs e)
+    {
+        _page = this;
+        if (_background)
+        {
+            _background = false;
+            ShowBackgroundButton();
+            ScanNote.Text = "This may take a minute.";
+            ScanNote.Visibility = _scanning ? Visibility.Visible : Visibility.Collapsed;
+            StatusText.Text = _scanning ? "Background scan off. This scan is still running." : "Background scan off";
+            return;
+        }
+        _background = true;
+        ShowBackgroundButton();
+        if (!_scanning)
+        {
+            _ = StartScanAsync(reset: _loaded.Count == 0);
+        }
+        ScanNote.Text = "Scanning in the background. This may take a minute. Other pages stay usable.";
+        ScanNote.Visibility = Visibility.Visible;
+        StatusText.Text = "Scanning in the background";
+    }
+
+    private void ShowBackgroundButton()
+    {
+        BackgroundScanButton.Content = _background ? "Background scan on" : "Scan in background";
+    }
 
     private void OnBackClick(object sender, RoutedEventArgs e) => GoBack();
 
@@ -139,66 +186,95 @@ public sealed partial class FoldersPage : Page
         ShowRows();
     }
 
-    private async Task StartScanAsync()
+    private async Task StartScanAsync(bool reset)
     {
+        if (!reset && _scanning)
+        {
+            return;
+        }
         _scan?.Cancel();
         var scan = new CancellationTokenSource();
         _scan = scan;
         int generation = ++_generation;
-        lock (_gate)
+        if (reset)
         {
-            _trail.Clear();
-            _loaded.Clear();
+            lock (_gate)
+            {
+                _trail.Clear();
+                _loaded.Clear();
+                _seen.Clear();
+                _root = new FolderScan.Node { Name = "This PC", FullPath = "", IsFolder = true };
+                _log.Clear();
+                _log.Add($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Folder scan started");
+            }
+            lock (_ready)
+            {
+                _ready.Clear();
+            }
+            _followSort = false;
+            _rows.Clear();
+            _shown.Clear();
+        }
+        else if (_root is null)
+        {
             _root = new FolderScan.Node { Name = "This PC", FullPath = "", IsFolder = true };
-            _log.Clear();
-            _log.Add($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Folder scan started");
         }
-        lock (_ready)
-        {
-            _ready.Clear();
-        }
-        _followSort = false;
-        _rows.Clear();
-        _shown.Clear();
         Progress.IsIndeterminate = true;
+        _scanning = true;
         ScanNote.Visibility = Visibility.Visible;
-        StatusText.Text = "Looking for drives";
-        ShowRows();
-        RefreshLog();
+        if (!_background)
+        {
+            StatusText.Text = reset ? "Looking for drives" : "Scanning";
+        }
+        if (reset)
+        {
+            ShowRows();
+            RefreshLog();
+        }
         try
         {
             await Task.Run(() => ScanDrives(scan.Token, generation), scan.Token);
             Note(generation, "Scan finished");
-            if (generation == _generation)
+            if (generation == _generation && _page is { } finished)
             {
-                StatusText.Text = "Scan finished";
+                finished.StatusText.Text = "Scan finished";
+                _background = false;
+                finished.ShowBackgroundButton();
             }
         }
         catch (OperationCanceledException)
         {
             Note(generation, "Scan cancelled");
-            if (generation == _generation)
+            if (generation == _generation && _page is { } cancelled)
             {
-                StatusText.Text = "Scan cancelled";
+                cancelled.StatusText.Text = _stoppedByToggle ? "Background scan off" : "Scan cancelled";
+                _background = false;
+                cancelled.ShowBackgroundButton();
             }
         }
         catch (Exception error)
         {
             Note(generation, $"Scan stopped: {error.GetType().Name}: {error.Message}");
-            if (generation == _generation)
+            if (generation == _generation && _page is { } stopped)
             {
-                StatusText.Text = "Scan stopped. Open Scan log for the reason.";
+                stopped.StatusText.Text = "Scan stopped. Open Scan log for the reason.";
             }
         }
         finally
         {
             if (generation == _generation)
             {
-                Progress.IsIndeterminate = false;
-                ScanNote.Visibility = Visibility.Collapsed;
-                WriteLog();
-                ShowRows();
-                RefreshLog();
+                _scanning = false;
+                _background = false;
+                _stoppedByToggle = false;
+                if (_page is { } page)
+                {
+                    page.Progress.IsIndeterminate = false;
+                    page.ScanNote.Visibility = Visibility.Collapsed;
+                    page.WriteLog();
+                    page.ShowRows();
+                    page.RefreshLog();
+                }
             }
         }
     }
@@ -241,15 +317,15 @@ public sealed partial class FoldersPage : Page
                 _log.AddRange(scan.Log);
                 _log.Add($"{DateTime.Now:HH:mm:ss} {drive.Name} counted {scan.Root.Size} bytes, {scan.FolderCount} folders, {scan.FileCount} files, {scan.Skipped} skipped");
             }
-            DispatcherQueue.TryEnqueue(() =>
+            Post(() =>
             {
-                if (generation != _generation)
+                if (generation != _generation || _page is not { } page)
                 {
                     return;
                 }
-                StatusText.Text = $"Finished {drive.Name}.";
-                WriteLog();
-                RefreshLog();
+                page.StatusText.Text = $"Finished {drive.Name}.";
+                page.WriteLog();
+                page.RefreshLog();
             });
         }
     }
@@ -259,6 +335,10 @@ public sealed partial class FoldersPage : Page
         lock (_gate)
         {
             if (generation != _generation || _root is null)
+            {
+                return;
+            }
+            if (!_seen.Add(folder.FullPath))
             {
                 return;
             }
@@ -272,7 +352,7 @@ public sealed partial class FoldersPage : Page
         {
             _ready.Enqueue(folder);
         }
-        DispatcherQueue.TryEnqueue(() => ShowOne(generation));
+        Post(() => _page?.ShowOne(generation));
     }
 
     private void ShowOne(int generation)
@@ -368,6 +448,18 @@ public sealed partial class FoldersPage : Page
         IsFolder = folder.IsFolder,
     };
 
+    private static void Post(Action action)
+    {
+        FoldersPage? page = _page;
+        page?.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (ReferenceEquals(_page, page))
+            {
+                action();
+            }
+        });
+    }
+
     private void ReportProgress(int generation, string path)
     {
         long now = Environment.TickCount64;
@@ -376,11 +468,11 @@ public sealed partial class FoldersPage : Page
             return;
         }
         _lastProgressTick = now;
-        DispatcherQueue.TryEnqueue(() =>
+        Post(() =>
         {
-            if (generation == _generation)
+            if (generation == _generation && _page is { } page)
             {
-                StatusText.Text = path;
+                page.StatusText.Text = path;
             }
         });
     }

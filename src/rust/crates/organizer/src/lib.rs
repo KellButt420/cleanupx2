@@ -1001,7 +1001,16 @@ mod tests {
             "existing"
         );
         assert_eq!(
-            fs::read_to_string(f.inbox.join("Images").join("a (2).png")).unwrap(),
+            fs::read_to_string(f.inbox.join("Images").join("a (2).png")).unwrap_or_else(|error| {
+                panic!(
+                    "Missing approved destination: {error}; planned={:?}; actual={:?}",
+                    plan.operations[0].destination,
+                    fs::read_dir(f.inbox.join("Images"))
+                        .unwrap()
+                        .map(|entry| entry.unwrap().file_name())
+                        .collect::<Vec<_>>()
+                )
+            }),
             "new"
         );
     }

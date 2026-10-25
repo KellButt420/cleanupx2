@@ -105,7 +105,9 @@ impl LockedFile {
         let name: Vec<u16> = crate::wide::os_to_wide(verbatim(destination).as_os_str());
         // An aligned allocation with the variable-length filename at its ABI offset.
         let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
-        let bytes = offset + (name.len() - 1) * 2;
+        // Supply the UTF-16 terminator as well as the explicit byte length.
+        // Win32's path conversion must never read past the variable buffer.
+        let bytes = offset + name.len() * 2;
         let mut storage = vec![0u64; bytes.div_ceil(8)];
         let info = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
         unsafe {
@@ -115,7 +117,7 @@ impl LockedFile {
             std::ptr::copy_nonoverlapping(
                 name.as_ptr(),
                 std::ptr::addr_of_mut!((*info).FileName).cast(),
-                name.len() - 1,
+                name.len(),
             );
             if SetFileInformationByHandle(
                 self.0.as_raw_handle(),
